@@ -409,7 +409,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private clearPlayerProjectiles(): void {
-    this.playerBullets.children.iterate((gameObject) => {
+    this.iterateGroup(this.playerBullets, (gameObject) => {
       const bullet = gameObject as PlayerBullet;
       if (bullet.active) {
         bullet.deactivate();
@@ -419,7 +419,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private clearEnemyProjectiles(): void {
-    this.enemyBullets.children.iterate((gameObject) => {
+    this.iterateGroup(this.enemyBullets, (gameObject) => {
       const bullet = gameObject as EnemyBullet;
       if (bullet.active) {
         bullet.deactivate();
@@ -459,9 +459,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private stopCombatMotion(): void {
-    this.player.setVelocity(0, 0);
+    if (this.player?.active) {
+      this.player.setVelocity(0, 0);
+    }
 
-    this.enemies.children.iterate((gameObject) => {
+    this.iterateGroup(this.enemies, (gameObject) => {
       const enemy = gameObject as Enemy;
       if (enemy.active) {
         enemy.setVelocity(0, 0);
@@ -469,7 +471,7 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
-    this.bosses.children.iterate((gameObject) => {
+    this.iterateGroup(this.bosses, (gameObject) => {
       const boss = gameObject as Boss;
       if (boss.active) {
         boss.setVelocity(0, 0);
@@ -477,7 +479,7 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
-    this.powerUps.children.iterate((gameObject) => {
+    this.iterateGroup(this.powerUps, (gameObject) => {
       const powerUp = gameObject as PowerUp;
       if (powerUp.active) {
         powerUp.setVelocity(0, 0);
@@ -540,24 +542,40 @@ export class GameScene extends Phaser.Scene {
     this.nearBackground?.setTilePosition(0, this.nearBackground.tilePositionY + delta * 0.02);
   }
 
+  private iterateGroup(
+    group: Phaser.Physics.Arcade.Group | undefined,
+    iterator: (gameObject: Phaser.GameObjects.GameObject) => boolean | null
+  ): void {
+    if (!group?.children) {
+      return;
+    }
+
+    group.children.iterate((gameObject) => {
+      if (!gameObject) {
+        return false;
+      }
+      return iterator(gameObject);
+    });
+  }
+
   private handleShutdown(): void {
     if (this.gameOverTimeoutId !== undefined) {
       window.clearTimeout(this.gameOverTimeoutId);
       this.gameOverTimeoutId = undefined;
     }
 
-    this.waveManager.shutdown();
-    this.collisionManager.destroy();
-    this.uiSystem.destroy();
-    this.audioSystem.destroy();
+    this.waveManager?.shutdown();
+    this.collisionManager?.destroy();
+    this.uiSystem?.destroy();
+    this.audioSystem?.destroy();
 
     this.clearProjectiles();
 
-    this.enemies.clear(true, true);
-    this.bosses.clear(true, true);
-    this.powerUps.clear(true, true);
-    this.playerBullets.clear(true, true);
-    this.enemyBullets.clear(true, true);
+    this.enemies?.clear(true, true);
+    this.bosses?.clear(true, true);
+    this.powerUps?.clear(true, true);
+    this.playerBullets?.clear(true, true);
+    this.enemyBullets?.clear(true, true);
 
     if (this.controls) {
       this.input.keyboard?.removeKey(this.controls.left);
@@ -573,12 +591,20 @@ export class GameScene extends Phaser.Scene {
       this.pauseKey = undefined;
     }
 
-    this.player.destroy();
+    this.player?.destroy();
     this.activeBoss = undefined;
     this.farBackground = undefined;
     this.nearBackground = undefined;
     this.physics.world.resume();
     this.time.timeScale = 1;
     this.tweens.killAll();
+
+    this.controls = undefined;
+    this.playerBullets = undefined as unknown as Phaser.Physics.Arcade.Group;
+    this.enemyBullets = undefined as unknown as Phaser.Physics.Arcade.Group;
+    this.enemies = undefined as unknown as Phaser.Physics.Arcade.Group;
+    this.bosses = undefined as unknown as Phaser.Physics.Arcade.Group;
+    this.powerUps = undefined as unknown as Phaser.Physics.Arcade.Group;
+    this.player = undefined as unknown as Player;
   }
 }
