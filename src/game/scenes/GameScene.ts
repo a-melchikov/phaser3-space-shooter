@@ -51,6 +51,7 @@ export class GameScene extends Phaser.Scene {
   private isFinishing = false;
   private score = 0;
   private activeBoss?: Boss;
+  private gameOverTimeoutId?: number;
 
   public constructor() {
     super(SCENE_KEYS.GAME);
@@ -62,6 +63,7 @@ export class GameScene extends Phaser.Scene {
     this.isFinishing = false;
     this.score = 0;
     this.activeBoss = undefined;
+    this.gameOverTimeoutId = undefined;
   }
 
   public create(): void {
@@ -439,12 +441,13 @@ export class GameScene extends Phaser.Scene {
     this.physics.world.pause();
     this.uiSystem.showBanner("Корабль уничтожен");
 
-    this.time.delayedCall(650, () => {
+    this.gameOverTimeoutId = window.setTimeout(() => {
+      this.gameOverTimeoutId = undefined;
       this.scene.start(SCENE_KEYS.GAME_OVER, {
         score: this.score,
         wave: this.waveManager.getCurrentWave()
       });
-    });
+    }, 650);
   }
 
   private forceResumeRuntimeState(): void {
@@ -510,6 +513,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleShutdown(): void {
+    if (this.gameOverTimeoutId !== undefined) {
+      window.clearTimeout(this.gameOverTimeoutId);
+      this.gameOverTimeoutId = undefined;
+    }
+
     this.waveManager.shutdown();
     this.collisionManager.destroy();
     this.uiSystem.destroy();
