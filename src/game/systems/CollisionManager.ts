@@ -35,28 +35,50 @@ export class CollisionManager {
         if (!options.canResolveCombat()) {
           return;
         }
-        options.onPlayerBulletHitsEnemy(left as PlayerBullet, right as Enemy);
+        const bullet = this.pickObject(left, right, PlayerBullet);
+        const enemy = this.pickObject(left, right, Enemy);
+        if (!bullet || !enemy) {
+          return;
+        }
+        options.onPlayerBulletHitsEnemy(bullet, enemy);
       }),
       scene.physics.add.overlap(options.playerBullets, options.bosses, (left, right) => {
         if (!options.canResolveCombat()) {
           return;
         }
-        options.onPlayerBulletHitsBoss(left as PlayerBullet, right as Boss);
+        const bullet = this.pickObject(left, right, PlayerBullet);
+        const boss = this.pickObject(left, right, Boss);
+        if (!bullet || !boss) {
+          return;
+        }
+        options.onPlayerBulletHitsBoss(bullet, boss);
       }),
-      scene.physics.add.overlap(options.enemyBullets, options.player, (left) => {
+      scene.physics.add.overlap(options.enemyBullets, options.player, (left, right) => {
         if (!options.canResolvePlayerDamage()) {
           return;
         }
-        options.onEnemyBulletHitsPlayer(left as EnemyBullet);
+        const bullet = this.pickObject(left, right, EnemyBullet);
+        if (!bullet) {
+          return;
+        }
+        options.onEnemyBulletHitsPlayer(bullet);
       }),
-      scene.physics.add.overlap(options.player, options.enemies, (_player, enemy) => {
+      scene.physics.add.overlap(options.player, options.enemies, (left, right) => {
         if (!options.canResolvePlayerDamage()) {
           return;
         }
-        options.onPlayerHitsEnemy(enemy as Enemy);
+        const enemy = this.pickObject(left, right, Enemy);
+        if (!enemy) {
+          return;
+        }
+        options.onPlayerHitsEnemy(enemy);
       }),
-      scene.physics.add.overlap(options.player, options.powerUps, (_player, powerUp) => {
-        options.onPlayerCollectsPowerUp(powerUp as PowerUp);
+      scene.physics.add.overlap(options.player, options.powerUps, (left, right) => {
+        const powerUp = this.pickObject(left, right, PowerUp);
+        if (!powerUp) {
+          return;
+        }
+        options.onPlayerCollectsPowerUp(powerUp);
       })
     );
   }
@@ -64,5 +86,41 @@ export class CollisionManager {
   public destroy(): void {
     this.colliders.forEach((collider) => collider.destroy());
     this.colliders.length = 0;
+  }
+
+  private pickObject<T extends Phaser.GameObjects.GameObject>(
+    left: unknown,
+    right: unknown,
+    ctor: new (...args: never[]) => T
+  ): T | null {
+    const leftGameObject = this.unwrapGameObject(left);
+    const rightGameObject = this.unwrapGameObject(right);
+
+    if (leftGameObject instanceof ctor) {
+      return leftGameObject;
+    }
+
+    if (rightGameObject instanceof ctor) {
+      return rightGameObject;
+    }
+
+    return null;
+  }
+
+  private unwrapGameObject(value: unknown): Phaser.GameObjects.GameObject | null {
+    if (value instanceof Phaser.GameObjects.GameObject) {
+      return value;
+    }
+
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "gameObject" in value &&
+      value.gameObject instanceof Phaser.GameObjects.GameObject
+    ) {
+      return value.gameObject;
+    }
+
+    return null;
   }
 }
