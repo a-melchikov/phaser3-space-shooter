@@ -49,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private isPaused = false;
   private isTransitioning = true;
   private isFinishing = false;
+  private isShuttingDown = false;
   private score = 0;
   private activeBoss?: Boss;
   private gameOverTimeoutId?: number;
@@ -61,6 +62,7 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.isTransitioning = true;
     this.isFinishing = false;
+    this.isShuttingDown = false;
     this.score = 0;
     this.activeBoss = undefined;
     this.gameOverTimeoutId = undefined;
@@ -454,8 +456,8 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.uiSystem.showPauseOverlay(false);
     this.time.timeScale = 1;
-    this.tweens.resumeAll();
-    this.physics.world.resume();
+    this.tweens?.resumeAll();
+    this.physics?.world?.resume();
   }
 
   private stopCombatMotion(): void {
@@ -493,15 +495,15 @@ export class GameScene extends Phaser.Scene {
     this.uiSystem.showPauseOverlay(this.isPaused);
 
     if (this.isPaused) {
-      this.physics.world.pause();
+      this.physics?.world?.pause();
       this.time.timeScale = 0;
-      this.tweens.pauseAll();
+      this.tweens?.pauseAll();
       return;
     }
 
     this.time.timeScale = 1;
-    this.physics.world.resume();
-    this.tweens.resumeAll();
+    this.physics?.world?.resume();
+    this.tweens?.resumeAll();
   }
 
   private spawnImpact(x: number, y: number, tint: number): void {
@@ -566,6 +568,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleShutdown(): void {
+    if (this.isShuttingDown) {
+      return;
+    }
+
+    this.isShuttingDown = true;
+
     if (this.gameOverTimeoutId !== undefined) {
       window.clearTimeout(this.gameOverTimeoutId);
       this.gameOverTimeoutId = undefined;
@@ -601,9 +609,9 @@ export class GameScene extends Phaser.Scene {
     this.activeBoss = undefined;
     this.farBackground = undefined;
     this.nearBackground = undefined;
-    this.physics.world.resume();
+    this.physics?.world?.resume();
     this.time.timeScale = 1;
-    this.tweens.killAll();
+    this.tweens?.killAll();
 
     this.controls = undefined;
     this.playerBullets = undefined as unknown as Phaser.Physics.Arcade.Group;
