@@ -30,6 +30,10 @@ export function formatHighscoreDate(value: string): string {
   return date.toLocaleDateString("ru-RU");
 }
 
+export function configureText<T extends Phaser.GameObjects.Text>(text: T): T {
+  return text.setResolution(Math.min(window.devicePixelRatio || 1, 2));
+}
+
 export function sanitizeHighscoreEntry(entry: Partial<HighscoreEntry>): HighscoreEntry | null {
   if (typeof entry.score !== "number" || typeof entry.wave !== "number" || typeof entry.date !== "string") {
     return null;

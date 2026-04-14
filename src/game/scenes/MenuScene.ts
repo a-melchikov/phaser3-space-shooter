@@ -3,7 +3,7 @@ import Phaser from "phaser";
 import { HighscoreStore } from "../services/HighscoreStore";
 import type { GameStartPayload, HighscoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
-import { formatHighscoreDate } from "../utils/helpers";
+import { configureText, formatHighscoreDate } from "../utils/helpers";
 import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
 
 export class MenuScene extends Phaser.Scene {
@@ -21,6 +21,7 @@ export class MenuScene extends Phaser.Scene {
   public create(): void {
     this.createBackground();
     this.createContent(HighscoreStore.loadScores());
+    this.refreshTextResolution();
 
     this.enterKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
@@ -183,6 +184,14 @@ export class MenuScene extends Phaser.Scene {
     this.isStarting = true;
     const payload: GameStartPayload = { source: "menu" };
     this.scene.start(SCENE_KEYS.GAME, payload);
+  }
+
+  private refreshTextResolution(): void {
+    this.children.list.forEach((object) => {
+      if (object instanceof Phaser.GameObjects.Text) {
+        configureText(object);
+      }
+    });
   }
 
   private handleShutdown(): void {

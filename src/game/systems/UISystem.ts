@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import { Player } from "../entities/Player";
 import type { ActivePowerUpState } from "../types/game";
 import { UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
+import { configureText } from "../utils/helpers";
 
 export class UISystem {
   private player?: Player;
@@ -174,6 +175,12 @@ export class UISystem {
       this.pauseText,
       this.bannerText
     );
+
+    this.hudObjects.forEach((object) => {
+      if (object instanceof Phaser.GameObjects.Text) {
+        configureText(object);
+      }
+    });
   }
 
   public bindPlayer(player: Player): void {

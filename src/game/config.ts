@@ -10,6 +10,7 @@ export function createGameConfig(parent: string | HTMLElement): Phaser.Types.Cor
   return {
     type: Phaser.AUTO,
     parent,
+    autoRound: true,
     backgroundColor: "#030712",
     scene: [BootScene, MenuScene, GameScene, GameOverScene],
     scale: {
@@ -17,6 +18,12 @@ export function createGameConfig(parent: string | HTMLElement): Phaser.Types.Cor
       autoCenter: Phaser.Scale.CENTER_BOTH,
       width: WORLD_WIDTH,
       height: WORLD_HEIGHT
+    },
+    render: {
+      antialias: true,
+      antialiasGL: true,
+      pixelArt: false,
+      roundPixels: true
     },
     physics: {
       default: "arcade",
