@@ -558,6 +558,13 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private destroyGroupMembers(group: Phaser.Physics.Arcade.Group | undefined): void {
+    this.iterateGroup(group, (gameObject) => {
+      gameObject.destroy();
+      return true;
+    });
+  }
+
   private handleShutdown(): void {
     if (this.gameOverTimeoutId !== undefined) {
       window.clearTimeout(this.gameOverTimeoutId);
@@ -570,12 +577,11 @@ export class GameScene extends Phaser.Scene {
     this.audioSystem?.destroy();
 
     this.clearProjectiles();
-
-    this.enemies?.clear(true, true);
-    this.bosses?.clear(true, true);
-    this.powerUps?.clear(true, true);
-    this.playerBullets?.clear(true, true);
-    this.enemyBullets?.clear(true, true);
+    this.destroyGroupMembers(this.enemies);
+    this.destroyGroupMembers(this.bosses);
+    this.destroyGroupMembers(this.powerUps);
+    this.destroyGroupMembers(this.playerBullets);
+    this.destroyGroupMembers(this.enemyBullets);
 
     if (this.controls) {
       this.input.keyboard?.removeKey(this.controls.left);
