@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Starfall Aegis</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">HTML5 Canvas Arcade</p>
+        <h1>Starfall Aegis</h1>
+        <p class="subtitle">
+          Лаконичный sci-fi шутер про защиту орбитального сектора от бесконечных волн вражеских кораблей.
+        </p>
+      </div>
+      <section class="control-card" aria-label="Управление">
+        <h2>Управление</h2>
+        <p><span>Стрелки / WASD</span><strong>Движение</strong></p>
+        <p><span>Space</span><strong>Стрельба</strong></p>
+        <p><span>P</span><strong>Пауза</strong></p>
+        <p><span>R</span><strong>Рестарт после поражения</strong></p>
+      </section>
+    </header>
+
+    <main class="game-layout">
+      <section class="game-panel">
+        <div class="hud" aria-label="Игровая статистика">
+          <div class="hud-card health-card">
+            <div class="hud-label">Здоровье</div>
+            <div class="health-bar" aria-hidden="true">
+              <div id="healthFill" class="health-fill"></div>
+            </div>
+            <div id="healthText" class="hud-value">100 / 100</div>
+          </div>
+
+          <div class="hud-card">
+            <div class="hud-label">Жизни</div>
+            <div id="livesValue" class="hud-value">3</div>
+          </div>
+
+          <div class="hud-card">
+            <div class="hud-label">Счёт</div>
+            <div id="scoreValue" class="hud-value">0</div>
+          </div>
+
+          <div class="hud-card">
+            <div class="hud-label">Волна</div>
+            <div id="waveValue" class="hud-value">1</div>
+          </div>
+
+          <div class="hud-card bonus-card">
+            <div class="hud-label">Активные бонусы</div>
+            <div id="bonusList" class="bonus-list">Нет активных бонусов</div>
+          </div>
+        </div>
+
+        <div class="canvas-frame">
+          <canvas id="gameCanvas" width="960" height="540" aria-label="Космический шутер"></canvas>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel-block">
+          <h2>Лучшие результаты</h2>
+          <ol id="highscoreList" class="scoreboard"></ol>
+        </section>
+
+        <section class="panel-block">
+          <h2>Как запустить</h2>
+          <p>Откройте файл <code>index.html</code> в браузере. Никаких библиотек и сборки не требуется.</p>
+        </section>
+
+        <section class="panel-block small-copy">
+          <h2>Подсказка</h2>
+          <p>Зажимайте <code>Space</code> для серийной стрельбы и не стойте под тяжёлыми врагами и боссом слишком долго.</p>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
