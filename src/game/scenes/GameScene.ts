@@ -66,6 +66,8 @@ export class GameScene extends Phaser.Scene {
 
   public create(): void {
     this.cameras.main.setBackgroundColor("#030712");
+    this.physics.world.resume();
+    this.time.timeScale = 1;
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
     this.createBackground();
@@ -431,6 +433,7 @@ export class GameScene extends Phaser.Scene {
 
     this.isFinishing = true;
     this.isTransitioning = true;
+    this.forceResumeRuntimeState();
     this.clearProjectiles();
     this.waveManager.shutdown();
     this.physics.world.pause();
@@ -442,6 +445,14 @@ export class GameScene extends Phaser.Scene {
         wave: this.waveManager.getCurrentWave()
       });
     });
+  }
+
+  private forceResumeRuntimeState(): void {
+    this.isPaused = false;
+    this.uiSystem.showPauseOverlay(false);
+    this.time.timeScale = 1;
+    this.tweens.resumeAll();
+    this.physics.world.resume();
   }
 
   private togglePause(): void {
@@ -530,6 +541,7 @@ export class GameScene extends Phaser.Scene {
     this.activeBoss = undefined;
     this.farBackground = undefined;
     this.nearBackground = undefined;
+    this.physics.world.resume();
     this.time.timeScale = 1;
     this.tweens.killAll();
   }
