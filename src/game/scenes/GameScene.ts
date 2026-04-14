@@ -438,7 +438,7 @@ export class GameScene extends Phaser.Scene {
     this.forceResumeRuntimeState();
     this.clearProjectiles();
     this.waveManager.shutdown();
-    this.physics.world.pause();
+    this.stopCombatMotion();
     this.uiSystem.showBanner("Корабль уничтожен");
 
     this.gameOverTimeoutId = window.setTimeout(() => {
@@ -456,6 +456,34 @@ export class GameScene extends Phaser.Scene {
     this.time.timeScale = 1;
     this.tweens.resumeAll();
     this.physics.world.resume();
+  }
+
+  private stopCombatMotion(): void {
+    this.player.setVelocity(0, 0);
+
+    this.enemies.children.iterate((gameObject) => {
+      const enemy = gameObject as Enemy;
+      if (enemy.active) {
+        enemy.setVelocity(0, 0);
+      }
+      return true;
+    });
+
+    this.bosses.children.iterate((gameObject) => {
+      const boss = gameObject as Boss;
+      if (boss.active) {
+        boss.setVelocity(0, 0);
+      }
+      return true;
+    });
+
+    this.powerUps.children.iterate((gameObject) => {
+      const powerUp = gameObject as PowerUp;
+      if (powerUp.active) {
+        powerUp.setVelocity(0, 0);
+      }
+      return true;
+    });
   }
 
   private togglePause(): void {
