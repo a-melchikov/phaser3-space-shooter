@@ -114,7 +114,8 @@ Google login на клиенте полезен как:
         PracticeScoreStore.ts
         ResultsService.ts
         RankedScoreSubmissionService.ts
-        NoopRankedScoreSubmissionService.ts
+        BackendLeaderboardClient.ts
+        HttpRankedScoreSubmissionService.ts
       utils/
         constants.ts
         helpers.ts
@@ -249,22 +250,23 @@ Vite встраивает `VITE_*` переменные **на этапе сбо
 - проверяется через `canSubmitRankedScore(session)`
 - доступен только для authenticated Google session
 - проходит через интерфейс `RankedScoreSubmissionService`
-- сейчас реализован как `NoopRankedScoreSubmissionService`
-- это подготовленная точка расширения, а не финальный backend
+- сейчас реализован через `HttpRankedScoreSubmissionService`
+- transport отделён от игрового кода и ходит в backend по `VITE_API_BASE_URL`
 
 ## Куда потом подключать leaderboard backend
 
 Точка расширения уже выделена:
 
 - интерфейс: [RankedScoreSubmissionService](./src/game/services/RankedScoreSubmissionService.ts)
-- текущая заглушка: [NoopRankedScoreSubmissionService](./src/game/services/NoopRankedScoreSubmissionService.ts)
+- backend client: [BackendLeaderboardClient](./src/game/services/BackendLeaderboardClient.ts)
+- ranked transport: [HttpRankedScoreSubmissionService](./src/game/services/HttpRankedScoreSubmissionService.ts)
 - orchestration: [ResultsService](./src/game/services/ResultsService.ts)
 
 Чтобы подключить реальный backend позже, достаточно:
 
-1. создать новый класс, реализующий `RankedScoreSubmissionService`
+1. расширить `BackendLeaderboardClient` новыми endpoints при необходимости
 2. отправлять туда только authenticated results
-3. подменить `NoopRankedScoreSubmissionService` в `main.ts`
+3. при необходимости заменить transport, реализующий `RankedScoreSubmissionService`
 
 Это позволит добавить leaderboard без переписывания сцен и без ломки guest mode.
 
@@ -279,7 +281,7 @@ Vite встраивает `VITE_*` переменные **на этапе сбо
 
 ## Что можно расширить дальше
 
-- заменить `NoopRankedScoreSubmissionService` на реальный backend client
+- добавить отдельный leaderboard screen, использующий `BackendLeaderboardClient`
 - добавить player profile storage для прогресса между сессиями
 - вынести auth-индикаторы в отдельную overlay-scene
 - показать avatar пользователя в меню
