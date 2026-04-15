@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
-import type { ActivePowerUpState } from "../types/game";
+import type { ActivePowerUpState, SessionPresentation } from "../types/game";
 import { UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
 import { configureText } from "../utils/helpers";
 
@@ -14,6 +14,8 @@ export class UISystem {
   private readonly scoreText: Phaser.GameObjects.Text;
   private readonly waveText: Phaser.GameObjects.Text;
   private readonly powerUpText: Phaser.GameObjects.Text;
+  private readonly sessionText: Phaser.GameObjects.Text;
+  private readonly rankedText: Phaser.GameObjects.Text;
   private readonly bossBarBg: Phaser.GameObjects.Rectangle;
   private readonly bossBarFill: Phaser.GameObjects.Rectangle;
   private readonly bossBarText: Phaser.GameObjects.Text;
@@ -26,7 +28,7 @@ export class UISystem {
 
   public constructor(private readonly scene: Phaser.Scene) {
     const panel = scene.add
-      .rectangle(208, 52, 392, 78, UI_COLORS.panel, 0.86)
+      .rectangle(208, 58, 404, 90, UI_COLORS.panel, 0.86)
       .setStrokeStyle(2, UI_COLORS.cyan, 0.14)
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -54,7 +56,7 @@ export class UISystem {
       .setDepth(52);
 
     this.healthText = scene.add
-      .text(18, 53, "100 / 100", {
+      .text(18, 54, "100 / 100", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "14px",
         color: "#eaf7ff"
@@ -63,7 +65,7 @@ export class UISystem {
       .setDepth(52);
 
     this.livesText = scene.add
-      .text(228, 20, "Жизни: 3", {
+      .text(248, 18, "Жизни: 3", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#eaf7ff",
@@ -73,7 +75,7 @@ export class UISystem {
       .setDepth(52);
 
     this.scoreText = scene.add
-      .text(228, 44, "Счёт: 0", {
+      .text(248, 44, "Счёт: 0", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#ffd76c",
@@ -83,7 +85,7 @@ export class UISystem {
       .setDepth(52);
 
     this.waveText = scene.add
-      .text(WORLD_WIDTH - 18, 20, "Волна: 1", {
+      .text(WORLD_WIDTH - 18, 18, "Волна: 1", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#6ef2ff",
@@ -94,7 +96,7 @@ export class UISystem {
       .setDepth(52);
 
     this.powerUpText = scene.add
-      .text(WORLD_WIDTH - 18, 46, "Бонусы: нет", {
+      .text(WORLD_WIDTH - 18, 44, "Бонусы: нет", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "14px",
         color: "#9abed8"
@@ -103,21 +105,41 @@ export class UISystem {
       .setScrollFactor(0)
       .setDepth(52);
 
+    this.sessionText = scene.add
+      .text(WORLD_WIDTH - 18, 66, "Профиль: гость", {
+        fontFamily: "Segoe UI, sans-serif",
+        fontSize: "13px",
+        color: "#8bcfff"
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(52);
+
+    this.rankedText = scene.add
+      .text(WORLD_WIDTH - 18, 84, "Режим: local practice", {
+        fontFamily: "Segoe UI, sans-serif",
+        fontSize: "13px",
+        color: "#9abed8"
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(52);
+
     this.bossBarBg = scene.add
-      .rectangle(WORLD_WIDTH * 0.5, 88, 340, 16, 0x16253d, 1)
+      .rectangle(WORLD_WIDTH * 0.5, 104, 340, 16, 0x16253d, 1)
       .setScrollFactor(0)
       .setDepth(52)
       .setVisible(false);
 
     this.bossBarFill = scene.add
-      .rectangle(WORLD_WIDTH * 0.5 - 170, 88, 340, 16, UI_COLORS.danger, 1)
+      .rectangle(WORLD_WIDTH * 0.5 - 170, 104, 340, 16, UI_COLORS.danger, 1)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(53)
       .setVisible(false);
 
     this.bossBarText = scene.add
-      .text(WORLD_WIDTH * 0.5, 64, "", {
+      .text(WORLD_WIDTH * 0.5, 80, "", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "14px",
         color: "#ffdce2"
@@ -148,7 +170,7 @@ export class UISystem {
     this.bannerText = scene.add
       .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.42, "", {
         fontFamily: "Segoe UI, sans-serif",
-        fontSize: "36px",
+        fontSize: "34px",
         color: "#eaf7ff",
         fontStyle: "bold",
         align: "center"
@@ -168,6 +190,8 @@ export class UISystem {
       this.scoreText,
       this.waveText,
       this.powerUpText,
+      this.sessionText,
+      this.rankedText,
       this.bossBarBg,
       this.bossBarFill,
       this.bossBarText,
@@ -185,6 +209,12 @@ export class UISystem {
 
   public bindPlayer(player: Player): void {
     this.player = player;
+  }
+
+  public setSessionStatus(session: SessionPresentation): void {
+    this.sessionText.setText(session.isGuest ? "Профиль: гость" : `Профиль: ${session.displayName}`);
+    this.rankedText.setText(session.rankedEligible ? "Режим: ranked-eligible" : "Режим: local practice");
+    this.rankedText.setColor(session.rankedEligible ? "#79f7c1" : "#9abed8");
   }
 
   public refresh(time: number): void {
@@ -234,7 +264,7 @@ export class UISystem {
 
     const text = effects
       .map((effect) => `${effect.label} ${(effect.remainingMs / 1000).toFixed(1)}с`)
-      .join("  •  ");
+      .join(" • ");
 
     this.powerUpText.setText(`Бонусы: ${text}`);
   }

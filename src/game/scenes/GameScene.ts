@@ -10,7 +10,7 @@ import { AudioSystem } from "../systems/AudioSystem";
 import { CollisionManager } from "../systems/CollisionManager";
 import { UISystem } from "../systems/UISystem";
 import { WaveManager } from "../systems/WaveManager";
-import type { EnemyType, GameStartPayload, PowerUpType, WaveManagerCallbacks } from "../types/game";
+import type { EnemyType, GameStartPayload, PowerUpType, SessionPresentation, WaveManagerCallbacks } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
 import {
   CAMERA_SHAKE_LIGHT,
@@ -53,12 +53,13 @@ export class GameScene extends Phaser.Scene {
   private score = 0;
   private activeBoss?: Boss;
   private gameOverTimeoutId?: number;
+  private runSession!: SessionPresentation;
 
   public constructor() {
     super(SCENE_KEYS.GAME);
   }
 
-  public init(_data: GameStartPayload): void {
+  public init(data: GameStartPayload): void {
     this.isPaused = false;
     this.isTransitioning = true;
     this.isFinishing = false;
@@ -66,6 +67,7 @@ export class GameScene extends Phaser.Scene {
     this.score = 0;
     this.activeBoss = undefined;
     this.gameOverTimeoutId = undefined;
+    this.runSession = data.session;
   }
 
   public create(): void {
@@ -86,6 +88,7 @@ export class GameScene extends Phaser.Scene {
     this.uiSystem.setWave(1);
     this.uiSystem.setPowerUps([]);
     this.uiSystem.setBossHealth(0, 0);
+    this.uiSystem.setSessionStatus(this.runSession);
 
     this.collisionManager = new CollisionManager({
       scene: this,
@@ -447,7 +450,8 @@ export class GameScene extends Phaser.Scene {
       this.gameOverTimeoutId = undefined;
       this.scene.start(SCENE_KEYS.GAME_OVER, {
         score: this.score,
-        wave: this.waveManager.getCurrentWave()
+        wave: this.waveManager.getCurrentWave(),
+        session: this.runSession
       });
     }, 650);
   }

@@ -1,9 +1,10 @@
 import Phaser from "phaser";
 
-import { HighscoreStore } from "../services/HighscoreStore";
-import type { GameOverPayload, HighscoreEntry } from "../types/game";
+import type { UserSession } from "../../auth/types";
+import { getGameAppContext } from "../appContext";
+import type { CompletedRunResult, GameOverPayload, GameStartPayload, PracticeScoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
-import { configureText, formatHighscoreDate } from "../utils/helpers";
+import { buildSessionPresentation, configureText, formatHighscoreDate } from "../utils/helpers";
 import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
 
 export class GameOverScene extends Phaser.Scene {
@@ -11,8 +12,19 @@ export class GameOverScene extends Phaser.Scene {
   private nearBackground?: Phaser.GameObjects.TileSprite;
   private restartKey?: Phaser.Input.Keyboard.Key;
   private menuKey?: Phaser.Input.Keyboard.Key;
-  private payload: GameOverPayload = { score: 0, wave: 1 };
+  private payload: GameOverPayload = {
+    score: 0,
+    wave: 1,
+    session: {
+      mode: "guest",
+      displayName: "Гость",
+      rankedEligible: false,
+      isGuest: true
+    }
+  };
   private restartRequested = false;
+  private readonly contentObjects: Phaser.GameObjects.GameObject[] = [];
+  private rankedStatusText?: Phaser.GameObjects.Text;
 
   public constructor() {
     super(SCENE_KEYS.GAME_OVER);
@@ -23,15 +35,18 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   public create(): void {
-    const nextScores = HighscoreStore.saveScore({
+    const session = getGameAppContext().authService.getSession();
+    const result: CompletedRunResult = {
       score: this.payload.score,
       wave: this.payload.wave,
-      date: new Date().toISOString()
-    });
+      completedAt: new Date().toISOString()
+    };
+
+    const practiceScores = getGameAppContext().resultsService.recordPracticeResult(result, session);
 
     this.createBackground();
-    this.createContent(nextScores);
-    this.refreshTextResolution();
+    this.createContent(practiceScores, session);
+    void this.updateRankedStatus(result, session);
 
     this.restartKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R);
     this.menuKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -45,7 +60,11 @@ export class GameOverScene extends Phaser.Scene {
 
     if (!this.restartRequested && this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
       this.restartRequested = true;
-      this.scene.start(SCENE_KEYS.GAME, { source: "gameover" });
+      const payload: GameStartPayload = {
+        source: "gameover",
+        session: buildSessionPresentation(getGameAppContext().authService.getSession())
+      };
+      this.scene.start(SCENE_KEYS.GAME, payload);
       return;
     }
 
@@ -69,89 +88,168 @@ export class GameOverScene extends Phaser.Scene {
     this.add.rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, WORLD_WIDTH, WORLD_HEIGHT, 0x10030a, 0.52);
   }
 
-  private createContent(scores: HighscoreEntry[]): void {
-    this.add
-      .text(WORLD_WIDTH * 0.5, 82, "GAME OVER", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "52px",
-        color: "#ffdce2",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5)
-      .setShadow(0, 0, "#ff6b7a", 12, false, true);
+  private createContent(scores: PracticeScoreEntry[], session: UserSession): void {
+    const title = this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, 72, "GAME OVER", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "48px",
+          color: "#ffdce2",
+          fontStyle: "bold"
+        })
+        .setOrigin(0.5)
+    );
 
-    this.add
-      .text(WORLD_WIDTH * 0.5, 128, GAME_TITLE, {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#f1b9c3"
-      })
-      .setOrigin(0.5);
+    title.setShadow(0, 0, "#ff6b7a", 12, false, true);
 
-    this.add
-      .rectangle(WORLD_WIDTH * 0.5, 218, 420, 108, UI_COLORS.panel, 0.9)
-      .setStrokeStyle(2, UI_COLORS.danger, 0.28);
+    this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, 112, GAME_TITLE, {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "18px",
+          color: "#f1b9c3"
+        })
+        .setOrigin(0.5)
+    );
 
-    this.add
-      .text(WORLD_WIDTH * 0.5, 186, `Итоговый счёт: ${this.payload.score}`, {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "28px",
-        color: "#ffffff",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5);
+    this.trackObject(
+      this.add
+        .rectangle(WORLD_WIDTH * 0.5, 210, 520, 138, UI_COLORS.panel, 0.9)
+        .setStrokeStyle(2, UI_COLORS.danger, 0.28)
+    );
 
-    this.add
-      .text(WORLD_WIDTH * 0.5, 226, `Достигнутая волна: ${this.payload.wave}`, {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "22px",
-        color: "#f5c0cb"
-      })
-      .setOrigin(0.5);
+    this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, 170, `Итоговый счёт: ${this.payload.score}`, {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "28px",
+          color: "#ffffff",
+          fontStyle: "bold"
+        })
+        .setOrigin(0.5)
+    );
 
-    this.add
-      .text(WORLD_WIDTH * 0.5, 264, "R — начать заново, Esc — вернуться в меню", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#9abed8"
-      })
-      .setOrigin(0.5);
+    const sessionLabel = session.isGuest ? "Гость" : `${session.displayName} • Google`;
+    this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, 208, `Волна: ${this.payload.wave} • Профиль: ${sessionLabel}`, {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "20px",
+          color: "#f5c0cb"
+        })
+        .setOrigin(0.5)
+    );
 
-    this.add
-      .rectangle(WORLD_WIDTH * 0.5, 415, 580, 210, UI_COLORS.panel, 0.88)
-      .setStrokeStyle(2, UI_COLORS.cyan, 0.2);
+    const modeSummary = session.isGuest
+      ? "Гостевой вылет: результат сохранён только в локальной practice history."
+      : "Google-профиль: результат сохранён локально и помечен как ranked-eligible для будущего leaderboard backend.";
 
-    this.add
-      .text(WORLD_WIDTH * 0.5, 332, "Топ-5 рекордов", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "26px",
-        color: "#ffd76c",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5);
+    this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, 240, modeSummary, {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "15px",
+          color: session.isGuest ? "#ffd76c" : "#79f7c1",
+          wordWrap: { width: 460 },
+          align: "center"
+        })
+        .setOrigin(0.5)
+    );
+
+    this.rankedStatusText = this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, 272, "Проверяем статус ranked submission...", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "14px",
+          color: "#9abed8",
+          wordWrap: { width: 460 },
+          align: "center"
+        })
+        .setOrigin(0.5)
+    ) as Phaser.GameObjects.Text;
+
+    this.trackObject(
+      this.add
+        .rectangle(WORLD_WIDTH * 0.5, 414, 620, 228, UI_COLORS.panel, 0.9)
+        .setStrokeStyle(2, UI_COLORS.cyan, 0.22)
+    );
+
+    this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, 322, "Локальная практика", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "26px",
+          color: "#ffd76c",
+          fontStyle: "bold"
+        })
+        .setOrigin(0.5)
+    );
 
     scores.forEach((entry, index) => {
-      this.add
-        .text(
-          WORLD_WIDTH * 0.5,
-          372 + index * 28,
-          `#${index + 1} — ${entry.score} очков • волна ${entry.wave} • ${formatHighscoreDate(entry.date)}`,
-          {
-            fontFamily: "Segoe UI, sans-serif",
-            fontSize: "18px",
-            color: index === 0 ? "#ffffff" : "#c9d8e5"
-          }
-        )
-        .setOrigin(0.5);
+      const modeLabel = entry.rankedEligible ? "eligible" : "practice";
+      this.trackObject(
+        this.add
+          .text(
+            WORLD_WIDTH * 0.5,
+            360 + index * 30,
+            `#${index + 1} — ${entry.score} очков • волна ${entry.wave} • ${entry.playerLabel} • ${modeLabel} • ${formatHighscoreDate(entry.date)}`,
+            {
+              fontFamily: "Segoe UI, sans-serif",
+              fontSize: "17px",
+              color: index === 0 ? "#ffffff" : "#c9d8e5",
+              wordWrap: { width: 560 },
+              align: "center"
+            }
+          )
+          .setOrigin(0.5)
+      );
     });
+
+    this.trackObject(
+      this.add
+        .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT - 28, "R — заново • Esc — вернуться в меню", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "18px",
+          color: "#9abed8"
+        })
+        .setOrigin(0.5, 1)
+    );
   }
 
-  private refreshTextResolution(): void {
-    this.children.list.forEach((object) => {
-      if (object instanceof Phaser.GameObjects.Text) {
-        configureText(object);
-      }
-    });
+  private async updateRankedStatus(result: CompletedRunResult, session: UserSession): Promise<void> {
+    const outcome = await getGameAppContext().resultsService.submitRankedResult(result, session);
+
+    if (!this.rankedStatusText || !this.rankedStatusText.active) {
+      return;
+    }
+
+    const color =
+      outcome.status === "failed"
+        ? "#ff9eaa"
+        : outcome.status === "unavailable"
+          ? "#ffd76c"
+          : outcome.status === "skipped"
+            ? "#9abed8"
+            : "#79f7c1";
+
+    this.rankedStatusText.setColor(color);
+    this.rankedStatusText.setText(outcome.message);
+  }
+
+  private trackObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.contentObjects.push(object);
+
+    if (object instanceof Phaser.GameObjects.Text) {
+      configureText(object);
+    }
+
+    return object;
+  }
+
+  private destroyContent(): void {
+    while (this.contentObjects.length > 0) {
+      this.contentObjects.pop()?.destroy();
+    }
   }
 
   private handleShutdown(): void {
@@ -165,8 +263,10 @@ export class GameOverScene extends Phaser.Scene {
       this.menuKey = undefined;
     }
 
+    this.destroyContent();
     this.farBackground = undefined;
     this.nearBackground = undefined;
     this.restartRequested = false;
+    this.rankedStatusText = undefined;
   }
 }
