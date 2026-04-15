@@ -11,7 +11,8 @@ export const CAMERA_SHAKE_LIGHT = 0.0035;
 
 export const STORAGE_KEYS = {
   legacyHighscores: "spaceShooterHighscoresV1",
-  highscores: "spaceShooterHighscoresV2"
+  legacyPracticeScores: "spaceShooterHighscoresV2",
+  practiceScores: "spaceShooterPracticeScoresV1"
 } as const;
 
 export const TEXTURE_KEYS = {

@@ -1,3 +1,5 @@
+import type { AuthMode } from "../../auth/types";
+
 export type EnemyType = "basic" | "fast" | "heavy";
 export type EnemyPattern = "straight" | "zigzag";
 export type PowerUpType = "heal" | "doubleShot" | "shield";
@@ -8,13 +10,43 @@ export interface HighscoreEntry {
   date: string;
 }
 
+export interface PracticeScoreEntry extends HighscoreEntry {
+  playerLabel: string;
+  mode: AuthMode;
+  rankedEligible: boolean;
+}
+
+export interface SessionPresentation {
+  mode: AuthMode;
+  displayName: string;
+  rankedEligible: boolean;
+  isGuest: boolean;
+}
+
 export interface GameStartPayload {
   source?: "menu" | "gameover";
+  session: SessionPresentation;
 }
 
 export interface GameOverPayload {
   score: number;
   wave: number;
+  session: SessionPresentation;
+}
+
+export interface CompletedRunResult {
+  score: number;
+  wave: number;
+  completedAt: string;
+}
+
+export interface RankedScorePayload extends CompletedRunResult {
+  playerLabel: string;
+}
+
+export interface RankedScoreSubmissionOutcome {
+  status: "queued" | "submitted" | "skipped" | "unavailable" | "failed";
+  message: string;
 }
 
 export interface ActivePowerUpState {

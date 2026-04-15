@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 
-import { HighscoreStore } from "../services/HighscoreStore";
+import { PracticeScoreStore } from "../services/PracticeScoreStore";
 import { SCENE_KEYS } from "../types/scene";
 import { GAME_TITLE, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
 import { generateTextures } from "../utils/textureFactory";
@@ -12,7 +12,7 @@ export class BootScene extends Phaser.Scene {
 
   public create(): void {
     generateTextures(this);
-    HighscoreStore.migrateLegacyScores();
+    new PracticeScoreStore().migrateLegacyScores();
 
     this.registry.set("gameTitle", GAME_TITLE);
     this.registry.set("worldWidth", WORLD_WIDTH);

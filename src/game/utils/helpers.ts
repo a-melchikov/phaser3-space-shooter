@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 
-import type { HighscoreEntry } from "../types/game";
+import type { UserSession } from "../../auth/types";
+import type { HighscoreEntry, PracticeScoreEntry, SessionPresentation } from "../types/game";
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -34,6 +35,15 @@ export function configureText<T extends Phaser.GameObjects.Text>(text: T): T {
   return text.setResolution(Math.min(window.devicePixelRatio || 1, 2));
 }
 
+export function buildSessionPresentation(session: UserSession): SessionPresentation {
+  return {
+    mode: session.mode,
+    displayName: session.displayName,
+    rankedEligible: session.rankedEligible,
+    isGuest: session.isGuest
+  };
+}
+
 export function sanitizeHighscoreEntry(entry: Partial<HighscoreEntry>): HighscoreEntry | null {
   if (typeof entry.score !== "number" || typeof entry.wave !== "number" || typeof entry.date !== "string") {
     return null;
@@ -43,5 +53,32 @@ export function sanitizeHighscoreEntry(entry: Partial<HighscoreEntry>): Highscor
     score: Math.max(0, Math.floor(entry.score)),
     wave: Math.max(1, Math.floor(entry.wave)),
     date: entry.date
+  };
+}
+
+export function sanitizePracticeScoreEntry(entry: Partial<PracticeScoreEntry>): PracticeScoreEntry | null {
+  if (
+    typeof entry.score !== "number" ||
+    typeof entry.wave !== "number" ||
+    typeof entry.date !== "string" ||
+    typeof entry.playerLabel !== "string" ||
+    (entry.mode !== "guest" && entry.mode !== "google") ||
+    typeof entry.rankedEligible !== "boolean"
+  ) {
+    return null;
+  }
+
+  const playerLabel = entry.playerLabel.trim();
+  if (playerLabel.length === 0) {
+    return null;
+  }
+
+  return {
+    score: Math.max(0, Math.floor(entry.score)),
+    wave: Math.max(1, Math.floor(entry.wave)),
+    date: entry.date,
+    playerLabel,
+    mode: entry.mode,
+    rankedEligible: entry.rankedEligible
   };
 }
