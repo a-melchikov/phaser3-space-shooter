@@ -81,6 +81,22 @@ export class FirebaseAuthService implements AuthService {
     return this.authState.getSnapshot();
   }
 
+  public async getIdToken(): Promise<string | null> {
+    await this.initialize();
+
+    const currentUser = this.auth?.currentUser;
+
+    if (!currentUser) {
+      return null;
+    }
+
+    try {
+      return await currentUser.getIdToken();
+    } catch {
+      return null;
+    }
+  }
+
   public subscribe(listener: AuthStateListener): () => void {
     return this.authState.subscribe(listener);
   }

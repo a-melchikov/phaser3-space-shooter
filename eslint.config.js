@@ -9,7 +9,7 @@ const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
   {
-    ignores: ["dist/**", "node_modules/**"]
+    ignores: ["dist/**", "node_modules/**", "backend/**"]
   },
   js.configs.recommended,
   {
@@ -26,6 +26,7 @@ export default [
         window: "readonly",
         document: "readonly",
         console: "readonly",
+        fetch: "readonly",
         localStorage: "readonly",
         performance: "readonly",
         HTMLElement: "readonly",

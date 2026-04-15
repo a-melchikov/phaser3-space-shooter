@@ -49,6 +49,55 @@ export interface RankedScoreSubmissionOutcome {
   message: string;
 }
 
+export interface LeaderboardEntry {
+  rank: number;
+  displayName: string;
+  avatarUrl: string | null;
+  bestScore: number;
+  bestWave: number;
+  bestScoreAt: string;
+}
+
+export interface LeaderboardResponse {
+  items: LeaderboardEntry[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+export interface LeaderboardTopResponse {
+  items: LeaderboardEntry[];
+  limit: number;
+}
+
+export interface AroundMeLeaderboardResponse {
+  playerRank: number | null;
+  items: LeaderboardEntry[];
+}
+
+export interface PlayerLeaderboardProfile {
+  player: {
+    id: string;
+    firebaseUid: string;
+    email: string | null;
+    displayName: string;
+    avatarUrl: string | null;
+  };
+  bestScore: number | null;
+  bestWave: number | null;
+  bestScoreAt: string | null;
+  rank: number | null;
+}
+
+export interface RankedSubmitResponse {
+  accepted: true;
+  improvedBest: boolean;
+  bestScore: number;
+  bestWave: number;
+  bestScoreAt: string;
+  rank: number | null;
+}
+
 export interface ActivePowerUpState {
   type: PowerUpType;
   label: string;
