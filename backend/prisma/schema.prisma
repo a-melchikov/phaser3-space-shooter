@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id           String       @id @default(cuid())
+  firebaseUid  String       @unique
+  email        String?
+  displayName  String
+  avatarUrl    String?
+  bestScore    Int?
+  bestWave     Int?
+  bestScoreAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  scoreEntries ScoreEntry[]
+
+  @@index([bestScore(sort: Desc), bestWave(sort: Desc), bestScoreAt(sort: Asc), id(sort: Asc)], map: "player_best_rank_idx")
+}
+
+model ScoreEntry {
+  id        String   @id @default(cuid())
+  playerId  String
+  score     Int
+  wave      Int
+  createdAt DateTime @default(now())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, createdAt(sort: Desc)], map: "score_entry_player_created_idx")
+}
