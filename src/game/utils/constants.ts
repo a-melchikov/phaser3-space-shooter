@@ -17,8 +17,6 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const TEXTURE_KEYS = {
-  backgroundFar: "bg-stars-far",
-  backgroundNear: "bg-stars-near",
   player: "ship-player",
   shieldRing: "shield-ring",
   enemyBasic: "enemy-basic",

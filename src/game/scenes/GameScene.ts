@@ -7,6 +7,7 @@ import { Player, PLAYER_EVENTS, type PlayerControls } from "../entities/Player";
 import { PlayerBullet } from "../entities/PlayerBullet";
 import { PowerUp } from "../entities/PowerUp";
 import { AudioSystem } from "../systems/AudioSystem";
+import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import { CollisionManager } from "../systems/CollisionManager";
 import { UISystem } from "../systems/UISystem";
 import { WaveManager } from "../systems/WaveManager";
@@ -29,8 +30,7 @@ import { chance, pickRandom, randomBetween } from "../utils/helpers";
 import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export class GameScene extends Phaser.Scene {
-  private farBackground?: Phaser.GameObjects.TileSprite;
-  private nearBackground?: Phaser.GameObjects.TileSprite;
+  private background?: BackgroundSystem;
   private backgroundOverlay?: Phaser.GameObjects.Rectangle;
   private footerText?: Phaser.GameObjects.Text;
 
@@ -149,7 +149,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   public override update(time: number, delta: number): void {
-    this.scrollBackground(delta);
+    this.background?.update(time);
 
     if (
       !this.isFinishing &&
@@ -184,15 +184,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createBackground(): void {
-    this.farBackground = this.add
-      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundFar)
-      .setOrigin(0)
-      .setAlpha(0.95);
-
-    this.nearBackground = this.add
-      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundNear)
-      .setOrigin(0)
-      .setAlpha(0.74);
+    this.background = new BackgroundSystem(this, SPACE_BACKGROUND_PRESETS.game);
 
     this.backgroundOverlay = this.add.rectangle(
       getViewportCenterX(this),
@@ -591,17 +583,11 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private scrollBackground(delta: number): void {
-    this.farBackground?.setTilePosition(0, this.farBackground.tilePositionY + delta * 0.008);
-    this.nearBackground?.setTilePosition(0, this.nearBackground.tilePositionY + delta * 0.02);
-  }
-
   private layoutBackground(): void {
     const viewportWidth = getViewportWidth(this);
     const viewportHeight = getViewportHeight(this);
 
-    this.farBackground?.setSize(viewportWidth, viewportHeight);
-    this.nearBackground?.setSize(viewportWidth, viewportHeight);
+    this.background?.resize();
     this.backgroundOverlay?.setPosition(getViewportCenterX(this), viewportHeight * 0.5).setSize(viewportWidth, viewportHeight);
     this.footerText?.setPosition(viewportWidth - 16, viewportHeight - 18);
   }
@@ -743,8 +729,8 @@ export class GameScene extends Phaser.Scene {
     this.player?.off(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
     this.player?.destroy();
     this.activeBoss = undefined;
-    this.farBackground = undefined;
-    this.nearBackground = undefined;
+    this.background?.destroy();
+    this.background = undefined;
     this.backgroundOverlay = undefined;
     this.footerText = undefined;
     this.physics?.world?.resume();

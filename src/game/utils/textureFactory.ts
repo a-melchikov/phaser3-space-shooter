@@ -176,32 +176,4 @@ export function generateTextures(scene: Phaser.Scene): void {
     graphics.fillStyle(0xffffff, 0.4);
     graphics.fillCircle(24, 24, 22);
   });
-
-  generateTexture(scene, TEXTURE_KEYS.backgroundFar, 128, 128, (graphics) => {
-    graphics.clear();
-    graphics.fillStyle(0x040814, 1);
-    graphics.fillRect(0, 0, 128, 128);
-    graphics.fillStyle(0xa7c8ff, 0.25);
-    for (let index = 0; index < 24; index += 1) {
-      graphics.fillCircle(
-        Phaser.Math.Between(0, 128),
-        Phaser.Math.Between(0, 128),
-        Phaser.Math.FloatBetween(0.5, 1.5)
-      );
-    }
-  });
-
-  generateTexture(scene, TEXTURE_KEYS.backgroundNear, 128, 128, (graphics) => {
-    graphics.clear();
-    graphics.fillStyle(0x040814, 1);
-    graphics.fillRect(0, 0, 128, 128);
-    graphics.fillStyle(0xeaf7ff, 0.55);
-    for (let index = 0; index < 18; index += 1) {
-      graphics.fillCircle(
-        Phaser.Math.Between(0, 128),
-        Phaser.Math.Between(0, 128),
-        Phaser.Math.FloatBetween(1, 2.3)
-      );
-    }
-  });
 }

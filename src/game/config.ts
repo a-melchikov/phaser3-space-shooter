@@ -22,7 +22,7 @@ export function createGameConfig(parent: string | HTMLElement): Phaser.Types.Cor
       antialias: true,
       antialiasGL: true,
       pixelArt: false,
-      roundPixels: true
+      roundPixels: false
     },
     physics: {
       default: "arcade",

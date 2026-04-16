@@ -3,16 +3,16 @@ import Phaser from "phaser";
 import type { UserSession } from "../../auth/types";
 import { getGameAppContext } from "../appContext";
 import { AudioSystem } from "../systems/AudioSystem";
+import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import type { CompletedRunResult, GameOverPayload, GameStartPayload, PracticeScoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, configureText, formatHighscoreDate } from "../utils/helpers";
-import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS } from "../utils/constants";
+import { GAME_TITLE, UI_COLORS } from "../utils/constants";
 import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export class GameOverScene extends Phaser.Scene {
-  private farBackground?: Phaser.GameObjects.TileSprite;
-  private nearBackground?: Phaser.GameObjects.TileSprite;
+  private background?: BackgroundSystem;
   private backgroundOverlay?: Phaser.GameObjects.Rectangle;
   private restartKey?: Phaser.Input.Keyboard.Key;
   private menuKey?: Phaser.Input.Keyboard.Key;
@@ -66,9 +66,8 @@ export class GameOverScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
   }
 
-  public override update(_: number, delta: number): void {
-    this.farBackground?.setTilePosition(0, this.farBackground.tilePositionY + delta * 0.006);
-    this.nearBackground?.setTilePosition(0, this.nearBackground.tilePositionY + delta * 0.016);
+  public override update(time: number): void {
+    this.background?.update(time);
 
     if (!this.restartRequested && this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
       this.restartRequested = true;
@@ -92,15 +91,7 @@ export class GameOverScene extends Phaser.Scene {
 
   private createBackground(): void {
     this.cameras.main.setBackgroundColor("#16060d");
-    this.farBackground = this.add
-      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundFar)
-      .setOrigin(0)
-      .setTint(0x9a3650);
-    this.nearBackground = this.add
-      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundNear)
-      .setOrigin(0)
-      .setTint(0xc26f7c)
-      .setAlpha(0.6);
+    this.background = new BackgroundSystem(this, SPACE_BACKGROUND_PRESETS.gameOver);
 
     this.backgroundOverlay = this.add.rectangle(
       getViewportCenterX(this),
@@ -287,8 +278,7 @@ export class GameOverScene extends Phaser.Scene {
     const viewportWidth = getViewportWidth(this);
     const viewportHeight = getViewportHeight(this);
 
-    this.farBackground?.setSize(viewportWidth, viewportHeight);
-    this.nearBackground?.setSize(viewportWidth, viewportHeight);
+    this.background?.resize();
     this.backgroundOverlay?.setPosition(getViewportCenterX(this), viewportHeight * 0.5).setSize(viewportWidth, viewportHeight);
   }
 
@@ -312,8 +302,8 @@ export class GameOverScene extends Phaser.Scene {
     }
 
     this.destroyContent();
-    this.farBackground = undefined;
-    this.nearBackground = undefined;
+    this.background?.destroy();
+    this.background = undefined;
     this.backgroundOverlay = undefined;
     this.restartRequested = false;
     this.rankedStatusText = undefined;
