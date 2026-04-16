@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 
-import { TEXTURE_KEYS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
+import { TEXTURE_KEYS } from "../utils/constants";
+import { getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export class EnemyBullet extends Phaser.Physics.Arcade.Image {
   public damage = 10;
@@ -33,7 +34,12 @@ export class EnemyBullet extends Phaser.Physics.Arcade.Image {
   public override update(): void {
     if (
       this.active &&
-      (this.y < -32 || this.y > WORLD_HEIGHT + 32 || this.x < -32 || this.x > WORLD_WIDTH + 32)
+      (
+        this.y < -32 ||
+        this.y > getViewportHeight(this.scene) + 32 ||
+        this.x < -32 ||
+        this.x > getViewportWidth(this.scene) + 32
+      )
     ) {
       this.deactivate();
     }

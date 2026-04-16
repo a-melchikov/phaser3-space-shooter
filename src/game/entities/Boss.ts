@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 
 import { EnemyBullet } from "./EnemyBullet";
-import { BOSS_CONFIG, WORLD_WIDTH } from "../utils/constants";
+import { BOSS_CONFIG } from "../utils/constants";
+import { getViewportCenterX, getViewportWidth } from "../utils/viewport";
 
 export const BOSS_EVENTS = {
   ATTACK: "boss-attack"
@@ -42,7 +43,7 @@ export class Boss extends Phaser.Physics.Arcade.Image {
     this.isEntering = true;
     this.bulletGroup = bullets;
 
-    this.enableBody(true, WORLD_WIDTH * 0.5, -120, true, true);
+    this.enableBody(true, getViewportCenterX(this.scene), -120, true, true);
     this.setDisplaySize(BOSS_CONFIG.width, BOSS_CONFIG.height);
     body.setSize(BOSS_CONFIG.width * 0.82, BOSS_CONFIG.height * 0.74, true);
     body.setVelocity(0, BOSS_CONFIG.enterSpeed);
@@ -63,7 +64,7 @@ export class Boss extends Phaser.Physics.Arcade.Image {
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     const minX = BOSS_CONFIG.width * 0.5 + 28;
-    const maxX = WORLD_WIDTH - BOSS_CONFIG.width * 0.5 - 28;
+    const maxX = getViewportWidth(this.scene) - BOSS_CONFIG.width * 0.5 - 28;
 
     if (this.isEntering && this.y >= BOSS_CONFIG.targetY) {
       this.isEntering = false;

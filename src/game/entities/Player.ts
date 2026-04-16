@@ -6,10 +6,9 @@ import {
   PLAYER_CONFIG,
   POWER_UP_DURATIONS_MS,
   POWER_UP_LABELS,
-  TEXTURE_KEYS,
-  WORLD_HEIGHT,
-  WORLD_WIDTH
+  TEXTURE_KEYS
 } from "../utils/constants";
+import { getPlayerSpawnX, getPlayerSpawnY } from "../utils/viewport";
 
 export const PLAYER_EVENTS = {
   FIRED: "player-fired"
@@ -41,7 +40,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
   private doubleShotUntil = 0;
 
   public constructor(scene: Phaser.Scene) {
-    super(scene, WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.84, TEXTURE_KEYS.player);
+    super(scene, getPlayerSpawnX(scene), getPlayerSpawnY(scene), TEXTURE_KEYS.player);
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -61,7 +60,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
   }
 
   public resetForRun(time = 0): void {
-    this.enableBody(true, WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.84, true, true);
+    this.enableBody(true, getPlayerSpawnX(this.scene), getPlayerSpawnY(this.scene), true, true);
     this.setVelocity(0, 0);
     this.health = PLAYER_CONFIG.maxHealth;
     this.lives = PLAYER_CONFIG.startingLives;
@@ -134,7 +133,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
 
     this.health = PLAYER_CONFIG.maxHealth;
     this.invulnerableUntil = time + PLAYER_CONFIG.respawnInvulnerabilityMs;
-    this.setPosition(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.84);
+    this.setPosition(getPlayerSpawnX(this.scene), getPlayerSpawnY(this.scene));
     this.setVelocity(0, 0);
 
     return { blocked: false, lostLife: true, gameOver: false };

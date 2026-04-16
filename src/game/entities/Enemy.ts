@@ -2,8 +2,9 @@ import Phaser from "phaser";
 
 import { EnemyBullet } from "./EnemyBullet";
 import type { EnemyType } from "../types/game";
-import { ENEMY_CONFIGS, WORLD_HEIGHT } from "../utils/constants";
+import { ENEMY_CONFIGS } from "../utils/constants";
 import { chance, randomBetween } from "../utils/helpers";
+import { getViewportHeight } from "../utils/viewport";
 
 export const ENEMY_EVENTS = {
   SHOT: "enemy-shot"
@@ -74,7 +75,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
       this.x = this.baseX + Math.sin((time - this.spawnedAt) * 0.001 * config.zigzagFrequency) * config.zigzagAmplitude;
     }
 
-    if (this.canShoot && this.y > 24 && this.y < WORLD_HEIGHT * 0.72 && time >= this.nextShotAt) {
+    if (this.canShoot && this.y > 24 && this.y < getViewportHeight(this.scene) * 0.72 && time >= this.nextShotAt) {
       const bullet = bullets.get() as EnemyBullet | null;
       if (bullet) {
         const horizontalVelocity = Phaser.Math.Clamp((targetX - this.x) * 0.55, -150, 150);
@@ -103,7 +104,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
   }
 
   public override update(): void {
-    if (this.active && this.y > WORLD_HEIGHT + 54) {
+    if (this.active && this.y > getViewportHeight(this.scene) + 54) {
       this.deactivate();
     }
   }

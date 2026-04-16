@@ -14,8 +14,7 @@ export function createGameConfig(parent: string | HTMLElement): Phaser.Types.Cor
     backgroundColor: "#030712",
     scene: [BootScene, MenuScene, GameScene, GameOverScene],
     scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
+      mode: Phaser.Scale.RESIZE,
       width: WORLD_WIDTH,
       height: WORLD_HEIGHT
     },

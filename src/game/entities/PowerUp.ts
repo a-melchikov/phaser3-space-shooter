@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 
 import type { PowerUpType } from "../types/game";
-import { POWER_UP_TEXTURES, WORLD_HEIGHT } from "../utils/constants";
+import { POWER_UP_TEXTURES } from "../utils/constants";
+import { getViewportHeight } from "../utils/viewport";
 
 export class PowerUp extends Phaser.Physics.Arcade.Image {
   public powerUpType: PowerUpType = "heal";
@@ -48,7 +49,7 @@ export class PowerUp extends Phaser.Physics.Arcade.Image {
       this.setAlpha(Math.floor(time * 0.02) % 2 === 0 ? 0.35 : 1);
     }
 
-    if (time >= this.expiresAt || this.y > WORLD_HEIGHT + 36) {
+    if (time >= this.expiresAt || this.y > getViewportHeight(this.scene) + 36) {
       this.deactivate();
     }
   }

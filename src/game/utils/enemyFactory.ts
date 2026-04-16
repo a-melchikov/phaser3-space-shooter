@@ -1,6 +1,6 @@
 import type { EnemyType } from "../types/game";
 
-import { BOSS_WAVE_INTERVAL, WORLD_WIDTH } from "./constants";
+import { BOSS_WAVE_INTERVAL } from "./constants";
 import { chance, randomBetween, randomInt } from "./helpers";
 
 export function pickEnemyTypeForWave(wave: number): EnemyType {
@@ -45,9 +45,9 @@ export function getEnemyBurstCount(wave: number): number {
   return chance(Math.min(0.55, 0.2 + wave * 0.03)) ? 2 : 1;
 }
 
-export function getEnemySpawnX(isHeavy: boolean): number {
+export function getEnemySpawnX(worldWidth: number, isHeavy: boolean): number {
   const margin = isHeavy ? 42 : 24;
-  return randomBetween(margin, WORLD_WIDTH - margin);
+  return randomBetween(margin, worldWidth - margin);
 }
 
 export function getEnemySpawnY(): number {
