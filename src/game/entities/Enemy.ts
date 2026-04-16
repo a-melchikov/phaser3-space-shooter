@@ -5,6 +5,10 @@ import type { EnemyType } from "../types/game";
 import { ENEMY_CONFIGS, WORLD_HEIGHT } from "../utils/constants";
 import { chance, randomBetween } from "../utils/helpers";
 
+export const ENEMY_EVENTS = {
+  SHOT: "enemy-shot"
+} as const;
+
 export class Enemy extends Phaser.Physics.Arcade.Image {
   public enemyType: EnemyType = "basic";
   public maxHealth = 1;
@@ -76,6 +80,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
         const horizontalVelocity = Phaser.Math.Clamp((targetX - this.x) * 0.55, -150, 150);
         bullet.fire(this.x, this.y + this.displayHeight * 0.45, horizontalVelocity, this.bulletSpeed, this.bulletDamage);
         this.nextShotAt = time + randomBetween(config.shotCooldownMinMs, config.shotCooldownMaxMs);
+        this.emit(ENEMY_EVENTS.SHOT, this);
       }
     }
   }

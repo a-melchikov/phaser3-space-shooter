@@ -3,6 +3,10 @@ import Phaser from "phaser";
 import { EnemyBullet } from "./EnemyBullet";
 import { BOSS_CONFIG, WORLD_WIDTH } from "../utils/constants";
 
+export const BOSS_EVENTS = {
+  ATTACK: "boss-attack"
+} as const;
+
 export class Boss extends Phaser.Physics.Arcade.Image {
   public maxHealth = 1;
   public health = 1;
@@ -110,6 +114,7 @@ export class Boss extends Phaser.Physics.Arcade.Image {
     const bulletCount = BOSS_CONFIG.fanShotCount;
     const startAngle = Math.PI * 0.5 - BOSS_CONFIG.fanSpread * 0.5;
     const step = bulletCount > 1 ? BOSS_CONFIG.fanSpread / (bulletCount - 1) : 0;
+    let fired = false;
 
     for (let index = 0; index < bulletCount; index += 1) {
       const bullet = this.bulletGroup.get() as EnemyBullet | null;
@@ -125,6 +130,11 @@ export class Boss extends Phaser.Physics.Arcade.Image {
         Math.sin(angle) * BOSS_CONFIG.bulletSpeed,
         BOSS_CONFIG.bulletDamage
       );
+      fired = true;
+    }
+
+    if (fired) {
+      this.emit(BOSS_EVENTS.ATTACK, this);
     }
   }
 }

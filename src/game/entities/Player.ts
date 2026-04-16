@@ -11,6 +11,10 @@ import {
   WORLD_WIDTH
 } from "../utils/constants";
 
+export const PLAYER_EVENTS = {
+  FIRED: "player-fired"
+} as const;
+
 export interface PlayerControls {
   left: Phaser.Input.Keyboard.Key;
   right: Phaser.Input.Keyboard.Key;
@@ -200,6 +204,8 @@ export class Player extends Phaser.Physics.Arcade.Image {
       }
       bullet.fire(this.x + offset, this.y - this.displayHeight * 0.44, -PLAYER_CONFIG.bulletSpeed);
     });
+
+    this.emit(PLAYER_EVENTS.FIRED);
   }
 
   private updateVisualState(time: number): void {

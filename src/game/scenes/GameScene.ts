@@ -1,9 +1,9 @@
 import Phaser from "phaser";
 
-import { Boss } from "../entities/Boss";
-import { Enemy } from "../entities/Enemy";
+import { Boss, BOSS_EVENTS } from "../entities/Boss";
+import { Enemy, ENEMY_EVENTS } from "../entities/Enemy";
 import { EnemyBullet } from "../entities/EnemyBullet";
-import { Player, type PlayerControls } from "../entities/Player";
+import { Player, PLAYER_EVENTS, type PlayerControls } from "../entities/Player";
 import { PlayerBullet } from "../entities/PlayerBullet";
 import { PowerUp } from "../entities/PowerUp";
 import { AudioSystem } from "../systems/AudioSystem";
@@ -12,6 +12,7 @@ import { UISystem } from "../systems/UISystem";
 import { WaveManager } from "../systems/WaveManager";
 import type { EnemyType, GameStartPayload, PowerUpType, SessionPresentation, WaveManagerCallbacks } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
+import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import {
   CAMERA_SHAKE_LIGHT,
   CAMERA_SHAKE_STRONG,
@@ -44,6 +45,8 @@ export class GameScene extends Phaser.Scene {
   private bosses!: Phaser.Physics.Arcade.Group;
   private powerUps!: Phaser.Physics.Arcade.Group;
 
+  private readonly trackedEnemies = new WeakSet<Enemy>();
+  private readonly trackedBosses = new WeakSet<Boss>();
   private controls?: PlayerControls;
   private pauseKey?: Phaser.Input.Keyboard.Key;
   private isPaused = false;
@@ -76,13 +79,15 @@ export class GameScene extends Phaser.Scene {
     this.time.timeScale = 1;
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
+    this.audioSystem = AudioSystem.getInstance(this);
+    this.audioSystem.playMusic(MUSIC_KEYS.GAMEPLAY);
+
     this.createBackground();
     this.createGroups();
     this.createPlayer();
     this.createInput();
 
-    this.audioSystem = new AudioSystem(this);
-    this.uiSystem = new UISystem(this);
+    this.uiSystem = new UISystem(this, this.audioSystem);
     this.uiSystem.bindPlayer(this.player);
     this.uiSystem.setScore(this.score);
     this.uiSystem.setWave(1);
@@ -110,8 +115,11 @@ export class GameScene extends Phaser.Scene {
     const callbacks: WaveManagerCallbacks = {
       onWaveChanged: (wave, bossWave) => {
         this.uiSystem.setWave(wave);
+        this.audioSystem.playSfx(SFX_KEYS.WAVE_START);
+        this.audioSystem.playMusic(bossWave ? MUSIC_KEYS.BOSS : MUSIC_KEYS.GAMEPLAY);
+
         if (bossWave) {
-          this.uiSystem.showBanner(`Волна ${wave} • босс`);
+          this.uiSystem.showBanner(`Р’РѕР»РЅР° ${wave} вЂў Р±РѕСЃСЃ`);
         }
       },
       onTransitionStateChange: (active) => {
@@ -177,7 +185,7 @@ export class GameScene extends Phaser.Scene {
 
     this.add.rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, WORLD_WIDTH, WORLD_HEIGHT, 0x05101f, 0.14);
     this.add
-      .text(WORLD_WIDTH - 16, WORLD_HEIGHT - 18, `${GAME_TITLE}  •  Phaser 3`, {
+      .text(WORLD_WIDTH - 16, WORLD_HEIGHT - 18, `${GAME_TITLE}  вЂў  Phaser 3`, {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "12px",
         color: "#6f8ba3"
@@ -222,6 +230,7 @@ export class GameScene extends Phaser.Scene {
   private createPlayer(): void {
     this.player = new Player(this);
     this.player.resetForRun(this.time.now);
+    this.player.on(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
   }
 
   private createInput(): void {
@@ -246,6 +255,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.bindEnemyAudioEvents(enemy);
+
     const x = getEnemySpawnX(type === "heavy");
     const y = getEnemySpawnY();
     enemy.spawn(type, this.waveManager.getCurrentWave(), x, y, this.time.now);
@@ -257,6 +268,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.bindBossAudioEvents(boss);
     this.clearProjectiles();
     boss.spawn(wave, this.enemyBullets);
     this.activeBoss = boss;
@@ -265,10 +277,10 @@ export class GameScene extends Phaser.Scene {
 
   private handlePlayerBulletHitsEnemy(bullet: PlayerBullet, enemy: Enemy): void {
     bullet.deactivate();
-    this.audioSystem.playHit();
     this.spawnImpact(enemy.x, enemy.y, UI_COLORS.gold);
 
     if (!enemy.takeDamage(bullet.damage)) {
+      this.audioSystem.playSfx(SFX_KEYS.ENEMY_HIT);
       return;
     }
 
@@ -277,12 +289,12 @@ export class GameScene extends Phaser.Scene {
 
   private handlePlayerBulletHitsBoss(bullet: PlayerBullet, boss: Boss): void {
     bullet.deactivate();
-    this.audioSystem.playBossHit();
     this.addScore(SCORE_VALUES.bossHit);
     this.spawnImpact(boss.x, boss.y + boss.displayHeight * 0.2, UI_COLORS.gold);
     this.cameras.main.shake(110, CAMERA_SHAKE_LIGHT);
 
     if (!boss.takeDamage(1)) {
+      this.audioSystem.playSfx(SFX_KEYS.BOSS_HIT);
       this.uiSystem.setBossHealth(boss.health, boss.maxHealth);
       return;
     }
@@ -301,7 +313,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.audioSystem.playHit();
+    this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
     this.spawnImpact(this.player.x, this.player.y, UI_COLORS.danger);
     this.cameras.main.shake(120, CAMERA_SHAKE_LIGHT);
 
@@ -322,7 +334,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.destroyEnemy(enemy, false);
-    this.audioSystem.playHit();
+    this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
     this.cameras.main.shake(150, CAMERA_SHAKE_LIGHT);
 
     if (result.gameOver) {
@@ -339,8 +351,8 @@ export class GameScene extends Phaser.Scene {
     this.player.applyPowerUp(powerUp.powerUpType, this.time.now);
     powerUp.deactivate();
     this.addScore(SCORE_VALUES.powerUpPickup);
-    this.audioSystem.playPowerUp();
-    this.uiSystem.showBanner(`Бонус: ${label}`);
+    this.audioSystem.playSfx(SFX_KEYS.POWERUP_PICKUP);
+    this.uiSystem.showBanner(`Р‘РѕРЅСѓСЃ: ${label}`);
     this.spawnImpact(this.player.x, this.player.y, UI_COLORS.success);
   }
 
@@ -367,7 +379,7 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.shake(160, CAMERA_SHAKE_STRONG);
     }
 
-    this.audioSystem.playExplosion();
+    this.audioSystem.playSfx(SFX_KEYS.ENEMY_DESTROY);
   }
 
   private destroyBoss(boss: Boss): void {
@@ -382,7 +394,7 @@ export class GameScene extends Phaser.Scene {
     this.uiSystem.setBossHealth(0, 0);
     this.spawnBurst(x, y, UI_COLORS.gold, 26);
     this.cameras.main.shake(260, CAMERA_SHAKE_STRONG);
-    this.audioSystem.playExplosion();
+    this.audioSystem.playSfx(SFX_KEYS.BOSS_DEATH);
   }
 
   private tryDropPowerUp(source: EnemyType, x: number, y: number): void {
@@ -444,7 +456,10 @@ export class GameScene extends Phaser.Scene {
     this.clearProjectiles();
     this.waveManager.shutdown();
     this.stopCombatMotion();
-    this.uiSystem.showBanner("Корабль уничтожен");
+    this.audioSystem.stopMusic();
+    this.audioSystem.stopAllSfx();
+    this.audioSystem.playSfx(SFX_KEYS.GAME_OVER);
+    this.uiSystem.showBanner("РљРѕСЂР°Р±Р»СЊ СѓРЅРёС‡С‚РѕР¶РµРЅ");
 
     this.gameOverTimeoutId = window.setTimeout(() => {
       this.gameOverTimeoutId = undefined;
@@ -548,6 +563,36 @@ export class GameScene extends Phaser.Scene {
     this.nearBackground?.setTilePosition(0, this.nearBackground.tilePositionY + delta * 0.02);
   }
 
+  private bindEnemyAudioEvents(enemy: Enemy): void {
+    if (this.trackedEnemies.has(enemy)) {
+      return;
+    }
+
+    this.trackedEnemies.add(enemy);
+    enemy.on(ENEMY_EVENTS.SHOT, this.handleEnemyShot, this);
+  }
+
+  private bindBossAudioEvents(boss: Boss): void {
+    if (this.trackedBosses.has(boss)) {
+      return;
+    }
+
+    this.trackedBosses.add(boss);
+    boss.on(BOSS_EVENTS.ATTACK, this.handleBossAttack, this);
+  }
+
+  private handlePlayerFired(): void {
+    this.audioSystem.playSfx(SFX_KEYS.PLAYER_SHOOT);
+  }
+
+  private handleEnemyShot(): void {
+    this.audioSystem.playSfx(SFX_KEYS.ENEMY_SHOOT);
+  }
+
+  private handleBossAttack(): void {
+    this.audioSystem.playSfx(SFX_KEYS.BOSS_ATTACK);
+  }
+
   private iterateGroup(
     group: Phaser.Physics.Arcade.Group | undefined,
     iterator: (gameObject: Phaser.GameObjects.GameObject) => boolean | null
@@ -586,7 +631,6 @@ export class GameScene extends Phaser.Scene {
     this.waveManager?.shutdown();
     this.collisionManager?.destroy();
     this.uiSystem?.destroy();
-    this.audioSystem?.destroy();
 
     this.clearProjectiles();
     this.destroyGroupMembers(this.enemies);
@@ -609,6 +653,7 @@ export class GameScene extends Phaser.Scene {
       this.pauseKey = undefined;
     }
 
+    this.player?.off(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
     this.player?.destroy();
     this.activeBoss = undefined;
     this.farBackground = undefined;

@@ -2,8 +2,10 @@ import Phaser from "phaser";
 
 import type { UserSession } from "../../auth/types";
 import { getGameAppContext } from "../appContext";
+import { AudioSystem } from "../systems/AudioSystem";
 import type { CompletedRunResult, GameOverPayload, GameStartPayload, PracticeScoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
+import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, configureText, formatHighscoreDate } from "../utils/helpers";
 import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
 
@@ -12,12 +14,13 @@ export class GameOverScene extends Phaser.Scene {
   private nearBackground?: Phaser.GameObjects.TileSprite;
   private restartKey?: Phaser.Input.Keyboard.Key;
   private menuKey?: Phaser.Input.Keyboard.Key;
+  private audioSystem!: AudioSystem;
   private payload: GameOverPayload = {
     score: 0,
     wave: 1,
     session: {
       mode: "guest",
-      displayName: "Гость",
+      displayName: "Р“РѕСЃС‚СЊ",
       rankedEligible: false,
       isGuest: true
     }
@@ -35,6 +38,10 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   public create(): void {
+    this.audioSystem = AudioSystem.getInstance(this);
+    this.audioSystem.stopAllSfx();
+    this.audioSystem.playMusic(MUSIC_KEYS.GAME_OVER);
+
     const session = getGameAppContext().authService.getSession();
     const result: CompletedRunResult = {
       score: this.payload.score,
@@ -60,6 +67,9 @@ export class GameOverScene extends Phaser.Scene {
 
     if (!this.restartRequested && this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
       this.restartRequested = true;
+      this.audioSystem.unlock();
+      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
+
       const payload: GameStartPayload = {
         source: "gameover",
         session: buildSessionPresentation(getGameAppContext().authService.getSession())
@@ -69,6 +79,8 @@ export class GameOverScene extends Phaser.Scene {
     }
 
     if (this.menuKey && Phaser.Input.Keyboard.JustDown(this.menuKey)) {
+      this.audioSystem.unlock();
+      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.scene.start(SCENE_KEYS.MENU);
     }
   }
@@ -120,7 +132,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 170, `Итоговый счёт: ${this.payload.score}`, {
+        .text(WORLD_WIDTH * 0.5, 170, `РС‚РѕРіРѕРІС‹Р№ СЃС‡С‘С‚: ${this.payload.score}`, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "28px",
           color: "#ffffff",
@@ -129,10 +141,10 @@ export class GameOverScene extends Phaser.Scene {
         .setOrigin(0.5)
     );
 
-    const sessionLabel = session.isGuest ? "Гость" : `${session.displayName} • Google`;
+    const sessionLabel = session.isGuest ? "Р“РѕСЃС‚СЊ" : `${session.displayName} вЂў Google`;
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 208, `Волна: ${this.payload.wave} • Профиль: ${sessionLabel}`, {
+        .text(WORLD_WIDTH * 0.5, 208, `Р’РѕР»РЅР°: ${this.payload.wave} вЂў РџСЂРѕС„РёР»СЊ: ${sessionLabel}`, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "20px",
           color: "#f5c0cb"
@@ -141,8 +153,8 @@ export class GameOverScene extends Phaser.Scene {
     );
 
     const modeSummary = session.isGuest
-      ? "Гостевой вылет: результат сохранён только в локальной practice history."
-      : "Google-профиль: результат сохранён локально и помечен как ranked-eligible для будущего leaderboard backend.";
+      ? "Р“РѕСЃС‚РµРІРѕР№ РІС‹Р»РµС‚: СЂРµР·СѓР»СЊС‚Р°С‚ СЃРѕС…СЂР°РЅС‘РЅ С‚РѕР»СЊРєРѕ РІ Р»РѕРєР°Р»СЊРЅРѕР№ practice history."
+      : "Google-РїСЂРѕС„РёР»СЊ: СЂРµР·СѓР»СЊС‚Р°С‚ СЃРѕС…СЂР°РЅС‘РЅ Р»РѕРєР°Р»СЊРЅРѕ Рё РїРѕРјРµС‡РµРЅ РєР°Рє ranked-eligible РґР»СЏ Р±СѓРґСѓС‰РµРіРѕ leaderboard backend.";
 
     this.trackObject(
       this.add
@@ -158,7 +170,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.rankedStatusText = this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 272, "Проверяем статус ranked submission...", {
+        .text(WORLD_WIDTH * 0.5, 272, "РџСЂРѕРІРµСЂСЏРµРј СЃС‚Р°С‚СѓСЃ ranked submission...", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "14px",
           color: "#9abed8",
@@ -176,7 +188,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 322, "Локальная практика", {
+        .text(WORLD_WIDTH * 0.5, 322, "Р›РѕРєР°Р»СЊРЅР°СЏ РїСЂР°РєС‚РёРєР°", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "26px",
           color: "#ffd76c",
@@ -192,7 +204,7 @@ export class GameOverScene extends Phaser.Scene {
           .text(
             WORLD_WIDTH * 0.5,
             360 + index * 30,
-            `#${index + 1} — ${entry.score} очков • волна ${entry.wave} • ${entry.playerLabel} • ${modeLabel} • ${formatHighscoreDate(entry.date)}`,
+            `#${index + 1} вЂ” ${entry.score} РѕС‡РєРѕРІ вЂў РІРѕР»РЅР° ${entry.wave} вЂў ${entry.playerLabel} вЂў ${modeLabel} вЂў ${formatHighscoreDate(entry.date)}`,
             {
               fontFamily: "Segoe UI, sans-serif",
               fontSize: "17px",
@@ -207,7 +219,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT - 28, "R — заново • Esc — вернуться в меню", {
+        .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT - 28, "R вЂ” Р·Р°РЅРѕРІРѕ вЂў Esc вЂ” РІРµСЂРЅСѓС‚СЊСЃСЏ РІ РјРµРЅСЋ", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#9abed8"
