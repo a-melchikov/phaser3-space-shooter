@@ -51,7 +51,7 @@ export class UISystem {
       .setDepth(50);
 
     const healthLabel = scene.add
-      .text(18, 18, "Р—РґРѕСЂРѕРІСЊРµ", {
+      .text(18, 18, "Здоровье", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "14px",
         color: "#9abed8"
@@ -81,7 +81,7 @@ export class UISystem {
       .setDepth(52);
 
     this.livesText = scene.add
-      .text(248, 18, "Р–РёР·РЅРё: 3", {
+      .text(248, 18, "Жизни: 3", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#eaf7ff",
@@ -91,7 +91,7 @@ export class UISystem {
       .setDepth(52);
 
     this.scoreText = scene.add
-      .text(248, 44, "РЎС‡С‘С‚: 0", {
+      .text(248, 44, "Счёт: 0", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#ffd76c",
@@ -101,7 +101,7 @@ export class UISystem {
       .setDepth(52);
 
     this.waveText = scene.add
-      .text(WORLD_WIDTH - 18, 18, "Р’РѕР»РЅР°: 1", {
+      .text(WORLD_WIDTH - 18, 18, "Волна: 1", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#6ef2ff",
@@ -112,7 +112,7 @@ export class UISystem {
       .setDepth(52);
 
     this.powerUpText = scene.add
-      .text(WORLD_WIDTH - 18, 44, "Р‘РѕРЅСѓСЃС‹: РЅРµС‚", {
+      .text(WORLD_WIDTH - 18, 44, "Бонусы: нет", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "14px",
         color: "#9abed8"
@@ -122,7 +122,7 @@ export class UISystem {
       .setDepth(52);
 
     this.sessionText = scene.add
-      .text(WORLD_WIDTH - 18, 66, "РџСЂРѕС„РёР»СЊ: РіРѕСЃС‚СЊ", {
+      .text(WORLD_WIDTH - 18, 66, "Профиль: гость", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "13px",
         color: "#8bcfff"
@@ -132,7 +132,7 @@ export class UISystem {
       .setDepth(52);
 
     this.rankedText = scene.add
-      .text(WORLD_WIDTH - 18, 84, "Р РµР¶РёРј: local practice", {
+      .text(WORLD_WIDTH - 18, 84, "Режим: local practice", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "13px",
         color: "#9abed8"
@@ -179,7 +179,7 @@ export class UISystem {
       .setVisible(false);
 
     this.pauseText = scene.add
-      .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5 - 86, "РџР°СѓР·Р°", {
+      .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5 - 86, "Пауза", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "48px",
         color: "#eaf7ff",
@@ -372,8 +372,8 @@ export class UISystem {
   }
 
   public setSessionStatus(session: SessionPresentation): void {
-    this.sessionText.setText(session.isGuest ? "РџСЂРѕС„РёР»СЊ: РіРѕСЃС‚СЊ" : `РџСЂРѕС„РёР»СЊ: ${session.displayName}`);
-    this.rankedText.setText(session.rankedEligible ? "Р РµР¶РёРј: ranked-eligible" : "Р РµР¶РёРј: local practice");
+    this.sessionText.setText(session.isGuest ? "Профиль: гость" : `Профиль: ${session.displayName}`);
+    this.rankedText.setText(session.rankedEligible ? "Режим: ranked-eligible" : "Режим: local practice");
     this.rankedText.setColor(session.rankedEligible ? "#79f7c1" : "#9abed8");
   }
 
@@ -386,19 +386,19 @@ export class UISystem {
     this.healthFill.displayWidth = 180 * ratio;
     this.healthFill.fillColor = ratio > 0.55 ? UI_COLORS.success : ratio > 0.25 ? UI_COLORS.gold : UI_COLORS.danger;
     this.healthText.setText(`${Math.ceil(this.player.health)} / ${this.player.maxHealth}`);
-    this.livesText.setText(`Р–РёР·РЅРё: ${this.player.lives}`);
+    this.livesText.setText(`Жизни: ${this.player.lives}`);
 
     this.setPowerUps(this.player.getActivePowerUps(time));
   }
 
   public setScore(score: number): void {
     this.score = score;
-    this.scoreText.setText(`РЎС‡С‘С‚: ${this.score}`);
+    this.scoreText.setText(`Счёт: ${this.score}`);
   }
 
   public setWave(wave: number): void {
     this.wave = wave;
-    this.waveText.setText(`Р’РѕР»РЅР°: ${this.wave}`);
+    this.waveText.setText(`Волна: ${this.wave}`);
   }
 
   public setBossHealth(current: number, max: number): void {
@@ -413,18 +413,18 @@ export class UISystem {
 
     const ratio = Phaser.Math.Clamp(current / max, 0, 1);
     this.bossBarFill.displayWidth = 340 * ratio;
-    this.bossBarText.setText(`Р‘РѕСЃСЃ: ${Math.ceil(current)} / ${max}`);
+    this.bossBarText.setText(`Босс: ${Math.ceil(current)} / ${max}`);
   }
 
   public setPowerUps(effects: ActivePowerUpState[]): void {
     if (effects.length === 0) {
-      this.powerUpText.setText("Р‘РѕРЅСѓСЃС‹: РЅРµС‚");
+      this.powerUpText.setText("Бонусы: нет");
       return;
     }
 
-    const text = effects.map((effect) => `${effect.label} ${(effect.remainingMs / 1000).toFixed(1)}СЃ`).join(" вЂў ");
+    const text = effects.map((effect) => `${effect.label} ${(effect.remainingMs / 1000).toFixed(1)}с`).join(" • ");
 
-    this.powerUpText.setText(`Р‘РѕРЅСѓСЃС‹: ${text}`);
+    this.powerUpText.setText(`Бонусы: ${text}`);
   }
 
   public showBanner(text: string): void {

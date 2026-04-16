@@ -119,7 +119,7 @@ export class GameScene extends Phaser.Scene {
         this.audioSystem.playMusic(bossWave ? MUSIC_KEYS.BOSS : MUSIC_KEYS.GAMEPLAY);
 
         if (bossWave) {
-          this.uiSystem.showBanner(`Р’РѕР»РЅР° ${wave} вЂў Р±РѕСЃСЃ`);
+          this.uiSystem.showBanner(`Волна ${wave} • босс`);
         }
       },
       onTransitionStateChange: (active) => {
@@ -185,7 +185,7 @@ export class GameScene extends Phaser.Scene {
 
     this.add.rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, WORLD_WIDTH, WORLD_HEIGHT, 0x05101f, 0.14);
     this.add
-      .text(WORLD_WIDTH - 16, WORLD_HEIGHT - 18, `${GAME_TITLE}  вЂў  Phaser 3`, {
+      .text(WORLD_WIDTH - 16, WORLD_HEIGHT - 18, `${GAME_TITLE} • Phaser 3`, {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "12px",
         color: "#6f8ba3"
@@ -352,7 +352,7 @@ export class GameScene extends Phaser.Scene {
     powerUp.deactivate();
     this.addScore(SCORE_VALUES.powerUpPickup);
     this.audioSystem.playSfx(SFX_KEYS.POWERUP_PICKUP);
-    this.uiSystem.showBanner(`Р‘РѕРЅСѓСЃ: ${label}`);
+    this.uiSystem.showBanner(`Бонус: ${label}`);
     this.spawnImpact(this.player.x, this.player.y, UI_COLORS.success);
   }
 
@@ -459,7 +459,7 @@ export class GameScene extends Phaser.Scene {
     this.audioSystem.stopMusic();
     this.audioSystem.stopAllSfx();
     this.audioSystem.playSfx(SFX_KEYS.GAME_OVER);
-    this.uiSystem.showBanner("РљРѕСЂР°Р±Р»СЊ СѓРЅРёС‡С‚РѕР¶РµРЅ");
+    this.uiSystem.showBanner("Корабль уничтожен");
 
     this.gameOverTimeoutId = window.setTimeout(() => {
       this.gameOverTimeoutId = undefined;

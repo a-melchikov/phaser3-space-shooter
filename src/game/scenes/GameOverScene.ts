@@ -20,7 +20,7 @@ export class GameOverScene extends Phaser.Scene {
     wave: 1,
     session: {
       mode: "guest",
-      displayName: "Р“РѕСЃС‚СЊ",
+      displayName: "Гость",
       rankedEligible: false,
       isGuest: true
     }
@@ -132,7 +132,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 170, `РС‚РѕРіРѕРІС‹Р№ СЃС‡С‘С‚: ${this.payload.score}`, {
+        .text(WORLD_WIDTH * 0.5, 170, `Итоговый счёт: ${this.payload.score}`, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "28px",
           color: "#ffffff",
@@ -141,10 +141,10 @@ export class GameOverScene extends Phaser.Scene {
         .setOrigin(0.5)
     );
 
-    const sessionLabel = session.isGuest ? "Р“РѕСЃС‚СЊ" : `${session.displayName} вЂў Google`;
+    const sessionLabel = session.isGuest ? "Гость" : `${session.displayName} • Google`;
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 208, `Р’РѕР»РЅР°: ${this.payload.wave} вЂў РџСЂРѕС„РёР»СЊ: ${sessionLabel}`, {
+        .text(WORLD_WIDTH * 0.5, 208, `Волна: ${this.payload.wave} • Профиль: ${sessionLabel}`, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "20px",
           color: "#f5c0cb"
@@ -153,8 +153,8 @@ export class GameOverScene extends Phaser.Scene {
     );
 
     const modeSummary = session.isGuest
-      ? "Р“РѕСЃС‚РµРІРѕР№ РІС‹Р»РµС‚: СЂРµР·СѓР»СЊС‚Р°С‚ СЃРѕС…СЂР°РЅС‘РЅ С‚РѕР»СЊРєРѕ РІ Р»РѕРєР°Р»СЊРЅРѕР№ practice history."
-      : "Google-РїСЂРѕС„РёР»СЊ: СЂРµР·СѓР»СЊС‚Р°С‚ СЃРѕС…СЂР°РЅС‘РЅ Р»РѕРєР°Р»СЊРЅРѕ Рё РїРѕРјРµС‡РµРЅ РєР°Рє ranked-eligible РґР»СЏ Р±СѓРґСѓС‰РµРіРѕ leaderboard backend.";
+      ? "Гостевой вылет: результат сохранён только в локальной practice history."
+      : "Google-профиль: результат сохранён локально и помечен как ranked-eligible для будущего leaderboard backend.";
 
     this.trackObject(
       this.add
@@ -170,7 +170,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.rankedStatusText = this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 272, "РџСЂРѕРІРµСЂСЏРµРј СЃС‚Р°С‚СѓСЃ ranked submission...", {
+        .text(WORLD_WIDTH * 0.5, 272, "Проверяем статус ranked submission...", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "14px",
           color: "#9abed8",
@@ -188,7 +188,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 322, "Р›РѕРєР°Р»СЊРЅР°СЏ РїСЂР°РєС‚РёРєР°", {
+        .text(WORLD_WIDTH * 0.5, 322, "Локальная практика", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "26px",
           color: "#ffd76c",
@@ -204,7 +204,7 @@ export class GameOverScene extends Phaser.Scene {
           .text(
             WORLD_WIDTH * 0.5,
             360 + index * 30,
-            `#${index + 1} вЂ” ${entry.score} РѕС‡РєРѕРІ вЂў РІРѕР»РЅР° ${entry.wave} вЂў ${entry.playerLabel} вЂў ${modeLabel} вЂў ${formatHighscoreDate(entry.date)}`,
+            `#${index + 1} — ${entry.score} очков • волна ${entry.wave} • ${entry.playerLabel} • ${modeLabel} • ${formatHighscoreDate(entry.date)}`,
             {
               fontFamily: "Segoe UI, sans-serif",
               fontSize: "17px",
@@ -219,7 +219,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT - 28, "R вЂ” Р·Р°РЅРѕРІРѕ вЂў Esc вЂ” РІРµСЂРЅСѓС‚СЊСЃСЏ РІ РјРµРЅСЋ", {
+        .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT - 28, "R — заново • Esc — вернуться в меню", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#9abed8"
