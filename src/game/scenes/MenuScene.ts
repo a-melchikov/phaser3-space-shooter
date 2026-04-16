@@ -3,16 +3,16 @@ import Phaser from "phaser";
 import { createGuestSession, type UserSession } from "../../auth/types";
 import { getGameAppContext } from "../appContext";
 import { AudioSystem } from "../systems/AudioSystem";
+import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import type { GameStartPayload, PracticeScoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, clamp, configureText, formatHighscoreDate } from "../utils/helpers";
-import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS } from "../utils/constants";
+import { GAME_TITLE, UI_COLORS } from "../utils/constants";
 import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export class MenuScene extends Phaser.Scene {
-  private farBackground?: Phaser.GameObjects.TileSprite;
-  private nearBackground?: Phaser.GameObjects.TileSprite;
+  private background?: BackgroundSystem;
   private backgroundOverlay?: Phaser.GameObjects.Rectangle;
   private enterKey?: Phaser.Input.Keyboard.Key;
   private spaceKey?: Phaser.Input.Keyboard.Key;
@@ -53,9 +53,8 @@ export class MenuScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
   }
 
-  public override update(_: number, delta: number): void {
-    this.farBackground?.setTilePosition(0, this.farBackground.tilePositionY + delta * 0.008);
-    this.nearBackground?.setTilePosition(0, this.nearBackground.tilePositionY + delta * 0.018);
+  public override update(time: number): void {
+    this.background?.update(time);
 
     if (
       !this.isStarting &&
@@ -71,14 +70,7 @@ export class MenuScene extends Phaser.Scene {
 
   private createBackground(): void {
     this.cameras.main.setBackgroundColor("#030712");
-    this.farBackground = this.add
-      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundFar)
-      .setOrigin(0)
-      .setAlpha(0.95);
-    this.nearBackground = this.add
-      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundNear)
-      .setOrigin(0)
-      .setAlpha(0.75);
+    this.background = new BackgroundSystem(this, SPACE_BACKGROUND_PRESETS.menu);
 
     this.backgroundOverlay = this.add.rectangle(
       getViewportCenterX(this),
@@ -309,6 +301,8 @@ export class MenuScene extends Phaser.Scene {
     height: number,
     scores: PracticeScoreEntry[]
   ): void {
+    const contentWidth = width - 36;
+
     this.trackObject(
       this.add
         .rectangle(centerX, centerY, width, height, UI_COLORS.panel, 0.88)
@@ -334,7 +328,7 @@ export class MenuScene extends Phaser.Scene {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "13px",
           color: "#9abed8",
-          wordWrap: { width: 230 },
+          wordWrap: { width: contentWidth },
           align: "center"
         })
         .setOrigin(0.5, 0)
@@ -348,7 +342,7 @@ export class MenuScene extends Phaser.Scene {
             fontFamily: "Segoe UI, sans-serif",
             fontSize: "16px",
             color: "#eaf7ff",
-            wordWrap: { width: 220 },
+            wordWrap: { width: contentWidth - 10 },
             align: "center"
           })
           .setOrigin(0.5)
@@ -359,23 +353,34 @@ export class MenuScene extends Phaser.Scene {
 
     scores.forEach((entry, index) => {
       const label = entry.rankedEligible ? "онлайн" : "локально";
+      const playerLabel = this.truncateLabel(entry.playerLabel, 19);
+
       this.trackObject(
         this.add
           .text(
-            centerX - 116,
-            centerY - 44 + index * 42,
-            `#${index + 1}  ${entry.score} очков • волна ${entry.wave}\n${entry.playerLabel} • ${label} • ${formatHighscoreDate(entry.date)}`,
+            centerX - 118,
+            centerY - 54 + index * 36,
+            `#${index + 1}  ${entry.score} очков • волна ${entry.wave}
+${playerLabel} • ${label} • ${formatHighscoreDate(entry.date)}`,
             {
               fontFamily: "Segoe UI, sans-serif",
-              fontSize: "14px",
+              fontSize: "13px",
               color: index === 0 ? "#eaf7ff" : "#9abed8",
-              lineSpacing: 4,
-              wordWrap: { width: 232 }
+              lineSpacing: 2,
+              wordWrap: { width: contentWidth }
             }
           )
           .setDepth(3)
       );
     });
+  }
+
+  private truncateLabel(value: string, maxLength: number): string {
+    if (value.length <= maxLength) {
+      return value;
+    }
+
+    return `${value.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
   }
 
   private createAudioPanel(centerX: number, centerY: number, width: number, height: number): void {
@@ -607,8 +612,7 @@ export class MenuScene extends Phaser.Scene {
     const viewportWidth = getViewportWidth(this);
     const viewportHeight = getViewportHeight(this);
 
-    this.farBackground?.setSize(viewportWidth, viewportHeight);
-    this.nearBackground?.setSize(viewportWidth, viewportHeight);
+    this.background?.resize();
     this.backgroundOverlay?.setPosition(getViewportCenterX(this), viewportHeight * 0.5).setSize(viewportWidth, viewportHeight);
   }
 
@@ -635,8 +639,8 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.destroyContent();
-    this.farBackground = undefined;
-    this.nearBackground = undefined;
+    this.background?.destroy();
+    this.background = undefined;
     this.backgroundOverlay = undefined;
     this.isStarting = false;
     this.isAuthBusy = false;
