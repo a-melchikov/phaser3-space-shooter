@@ -2,9 +2,11 @@ import Phaser from "phaser";
 
 import { createGuestSession, type UserSession } from "../../auth/types";
 import { getGameAppContext } from "../appContext";
+import { AudioSystem } from "../systems/AudioSystem";
 import type { GameStartPayload, PracticeScoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
-import { buildSessionPresentation, configureText, formatHighscoreDate } from "../utils/helpers";
+import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
+import { buildSessionPresentation, clamp, configureText, formatHighscoreDate } from "../utils/helpers";
 import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
 
 export class MenuScene extends Phaser.Scene {
@@ -14,6 +16,7 @@ export class MenuScene extends Phaser.Scene {
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private authUnsubscribe?: () => void;
   private readonly contentObjects: Phaser.GameObjects.GameObject[] = [];
+  private audioSystem!: AudioSystem;
   private session: UserSession = createGuestSession();
   private isStarting = false;
   private isAuthBusy = false;
@@ -26,11 +29,18 @@ export class MenuScene extends Phaser.Scene {
 
   public create(): void {
     this.session = getGameAppContext().authService.getSession();
+    this.audioSystem = AudioSystem.getInstance(this);
+    this.audioSystem.stopAllSfx();
+    this.audioSystem.playMusic(MUSIC_KEYS.MENU);
+
     this.createBackground();
     this.renderContent();
 
     this.enterKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.input.on("pointerdown", this.handleFirstInteraction, this);
+    this.input.keyboard?.on("keydown", this.handleFirstInteraction, this);
+
     this.authUnsubscribe = getGameAppContext().authService.subscribe((session) => {
       this.session = session;
       this.isAuthBusy = false;
@@ -50,6 +60,8 @@ export class MenuScene extends Phaser.Scene {
       ((this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey)) ||
         (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)))
     ) {
+      this.handleFirstInteraction();
+      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.startGame();
     }
   }
@@ -90,7 +102,7 @@ export class MenuScene extends Phaser.Scene {
 
     const subtitle = this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 106, "Аркадный вылет с guest mode и Google auth foundation", {
+        .text(WORLD_WIDTH * 0.5, 106, "РђСЂРєР°РґРЅС‹Р№ РІС‹Р»РµС‚ СЃ guest mode Рё Google auth foundation", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#9abed8"
@@ -104,13 +116,14 @@ export class MenuScene extends Phaser.Scene {
     this.createAuthPanel(182, 306, 300, 320, googleAvailable);
     this.createControlsPanel(480, 306, 248, 320);
     this.createPracticePanel(778, 306, 300, 320, practiceScores);
+    this.createAudioPanel(WORLD_WIDTH * 0.5, 480, 720, 36);
 
     const quickStart = this.trackObject(
       this.add
         .text(
           WORLD_WIDTH * 0.5,
-          WORLD_HEIGHT - 28,
-          "Enter / Space — начать игру текущим режимом. Гость играет полноценно, но остаётся вне ranked results.",
+          WORLD_HEIGHT - 10,
+          "Enter / Space вЂ” РЅР°С‡Р°С‚СЊ РёРіСЂСѓ С‚РµРєСѓС‰РёРј СЂРµР¶РёРјРѕРј. Р“РѕСЃС‚СЊ РёРіСЂР°РµС‚ РїРѕР»РЅРѕС†РµРЅРЅРѕ, РЅРѕ РѕСЃС‚Р°С‘С‚СЃСЏ РІРЅРµ ranked results.",
           {
             fontFamily: "Segoe UI, sans-serif",
             fontSize: "15px",
@@ -135,7 +148,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX, centerY - 128, "Профиль", {
+        .text(centerX, centerY - 128, "РџСЂРѕС„РёР»СЊ", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "26px",
           color: "#6ef2ff",
@@ -146,12 +159,12 @@ export class MenuScene extends Phaser.Scene {
     );
 
     const profileStatus = this.session.isGuest
-      ? "Гость"
-      : `${this.session.displayName}${this.session.email ? ` • ${this.session.email}` : ""}`;
+      ? "Р“РѕСЃС‚СЊ"
+      : `${this.session.displayName}${this.session.email ? ` вЂў ${this.session.email}` : ""}`;
 
     this.trackObject(
       this.add
-        .text(centerX - 112, centerY - 88, `Статус: ${profileStatus}`, {
+        .text(centerX - 112, centerY - 88, `РЎС‚Р°С‚СѓСЃ: ${profileStatus}`, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#eaf7ff",
@@ -161,8 +174,8 @@ export class MenuScene extends Phaser.Scene {
     );
 
     const modeDescription = this.session.isGuest
-      ? "Guest mode: можно играть сразу, а результаты попадают только в локальную practice history на этом устройстве."
-      : "Google profile: результаты помечаются как ranked-eligible и готовы для будущей интеграции leaderboard backend.";
+      ? "Guest mode: РјРѕР¶РЅРѕ РёРіСЂР°С‚СЊ СЃСЂР°Р·Сѓ, Р° СЂРµР·СѓР»СЊС‚Р°С‚С‹ РїРѕРїР°РґР°СЋС‚ С‚РѕР»СЊРєРѕ РІ Р»РѕРєР°Р»СЊРЅСѓСЋ practice history РЅР° СЌС‚РѕРј СѓСЃС‚СЂРѕР№СЃС‚РІРµ."
+      : "Google profile: СЂРµР·СѓР»СЊС‚Р°С‚С‹ РїРѕРјРµС‡Р°СЋС‚СЃСЏ РєР°Рє ranked-eligible Рё РіРѕС‚РѕРІС‹ РґР»СЏ Р±СѓРґСѓС‰РµР№ РёРЅС‚РµРіСЂР°С†РёРё leaderboard backend.";
 
     this.trackObject(
       this.add
@@ -176,15 +189,15 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(3)
     );
 
-    const startLabel = this.session.isGuest ? "Играть как гость" : "Начать игру";
+    const startLabel = this.session.isGuest ? "РРіСЂР°С‚СЊ РєР°Рє РіРѕСЃС‚СЊ" : "РќР°С‡Р°С‚СЊ РёРіСЂСѓ";
     this.createButton(centerX, centerY + 54, 228, 42, startLabel, !this.isAuthBusy, () => this.startGame(), "primary");
 
     if (this.session.isGuest) {
       const googleLabel = googleAvailable
         ? this.isAuthBusy
-          ? "Вход через Google..."
-          : "Войти через Google"
-        : "Google login недоступен";
+          ? "Р’С…РѕРґ С‡РµСЂРµР· Google..."
+          : "Р’РѕР№С‚Рё С‡РµСЂРµР· Google"
+        : "Google login РЅРµРґРѕСЃС‚СѓРїРµРЅ";
       this.createButton(
         centerX,
         centerY + 108,
@@ -196,7 +209,7 @@ export class MenuScene extends Phaser.Scene {
         "secondary"
       );
     } else {
-      const signOutLabel = this.isAuthBusy ? "Выход..." : "Выйти в гостя";
+      const signOutLabel = this.isAuthBusy ? "Р’С‹С…РѕРґ..." : "Р’С‹Р№С‚Рё РІ РіРѕСЃС‚СЏ";
       this.createButton(
         centerX,
         centerY + 108,
@@ -210,8 +223,8 @@ export class MenuScene extends Phaser.Scene {
     }
 
     const availabilityText = googleAvailable
-      ? "Google login активируется через Firebase Authentication и восстанавливает сессию после reload."
-      : "Для Google login добавьте Firebase env-переменные из .env.example и включите Google provider в Firebase Console.";
+      ? "Google login Р°РєС‚РёРІРёСЂСѓРµС‚СЃСЏ С‡РµСЂРµР· Firebase Authentication Рё РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ СЃРµСЃСЃРёСЋ РїРѕСЃР»Рµ reload."
+      : "Р”Р»СЏ Google login РґРѕР±Р°РІСЊС‚Рµ Firebase env-РїРµСЂРµРјРµРЅРЅС‹Рµ РёР· .env.example Рё РІРєР»СЋС‡РёС‚Рµ Google provider РІ Firebase Console.";
 
     this.trackObject(
       this.add
@@ -250,7 +263,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX, centerY - 128, "Управление", {
+        .text(centerX, centerY - 128, "РЈРїСЂР°РІР»РµРЅРёРµ", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "26px",
           color: "#6ef2ff",
@@ -261,11 +274,11 @@ export class MenuScene extends Phaser.Scene {
     );
 
     const lines = [
-      "Стрелки — движение корабля",
-      "Space — стрельба с cooldown",
-      "P — пауза во время боя",
-      "R — рестарт только после поражения",
-      "Esc — возврат в меню с экрана Game Over"
+      "РЎС‚СЂРµР»РєРё вЂ” РґРІРёР¶РµРЅРёРµ РєРѕСЂР°Р±Р»СЏ",
+      "Space вЂ” СЃС‚СЂРµР»СЊР±Р° СЃ cooldown",
+      "P вЂ” РїР°СѓР·Р° РІРѕ РІСЂРµРјСЏ Р±РѕСЏ",
+      "R вЂ” СЂРµСЃС‚Р°СЂС‚ С‚РѕР»СЊРєРѕ РїРѕСЃР»Рµ РїРѕСЂР°Р¶РµРЅРёСЏ",
+      "Esc вЂ” РІРѕР·РІСЂР°С‚ РІ РјРµРЅСЋ СЃ СЌРєСЂР°РЅР° Game Over"
     ];
 
     lines.forEach((line, index) => {
@@ -285,8 +298,8 @@ export class MenuScene extends Phaser.Scene {
       this.add
         .text(
           centerX - 92,
-          centerY + 124,
-          "Guest и Google играют в одну и ту же игру. Разница только в том, считается ли результат ranked-eligible.",
+          centerY + 118,
+          "Guest Рё Google РёРіСЂР°СЋС‚ РІ РѕРґРЅСѓ Рё С‚Сѓ Р¶Рµ РёРіСЂСѓ. Р Р°Р·РЅРёС†Р° С‚РѕР»СЊРєРѕ РІ С‚РѕРј, СЃС‡РёС‚Р°РµС‚СЃСЏ Р»Рё СЂРµР·СѓР»СЊС‚Р°С‚ ranked-eligible.",
           {
             fontFamily: "Segoe UI, sans-serif",
             fontSize: "13px",
@@ -315,7 +328,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX, centerY - 128, "Локальная практика", {
+        .text(centerX, centerY - 128, "Р›РѕРєР°Р»СЊРЅР°СЏ РїСЂР°РєС‚РёРєР°", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "26px",
           color: "#ffd76c",
@@ -327,7 +340,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX, centerY - 96, "Это не leaderboard. Здесь только local practice history на устройстве.", {
+        .text(centerX, centerY - 96, "Р­С‚Рѕ РЅРµ leaderboard. Р—РґРµСЃСЊ С‚РѕР»СЊРєРѕ local practice history РЅР° СѓСЃС‚СЂРѕР№СЃС‚РІРµ.", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "13px",
           color: "#9abed8",
@@ -341,7 +354,7 @@ export class MenuScene extends Phaser.Scene {
     if (scores.length === 0) {
       this.trackObject(
         this.add
-          .text(centerX, centerY - 6, "Пока нет локальных тренировочных результатов.", {
+          .text(centerX, centerY - 6, "РџРѕРєР° РЅРµС‚ Р»РѕРєР°Р»СЊРЅС‹С… С‚СЂРµРЅРёСЂРѕРІРѕС‡РЅС‹С… СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ.", {
             fontFamily: "Segoe UI, sans-serif",
             fontSize: "16px",
             color: "#eaf7ff",
@@ -361,7 +374,7 @@ export class MenuScene extends Phaser.Scene {
           .text(
             centerX - 116,
             centerY - 44 + index * 42,
-            `#${index + 1}  ${entry.score} очков • волна ${entry.wave}\n${entry.playerLabel} • ${label} • ${formatHighscoreDate(entry.date)}`,
+            `#${index + 1}  ${entry.score} РѕС‡РєРѕРІ вЂў РІРѕР»РЅР° ${entry.wave}\n${entry.playerLabel} вЂў ${label} вЂў ${formatHighscoreDate(entry.date)}`,
             {
               fontFamily: "Segoe UI, sans-serif",
               fontSize: "14px",
@@ -373,6 +386,94 @@ export class MenuScene extends Phaser.Scene {
           .setDepth(3)
       );
     });
+  }
+
+  private createAudioPanel(centerX: number, centerY: number, width: number, height: number): void {
+    const settings = this.audioSystem.getSettings();
+
+    this.trackObject(
+      this.add
+        .rectangle(centerX, centerY, width, height, UI_COLORS.panel, 0.94)
+        .setStrokeStyle(2, UI_COLORS.gold, 0.26)
+        .setDepth(2)
+    );
+
+    this.trackObject(
+      this.add
+        .text(centerX - 330, centerY, "Audio", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "18px",
+          color: "#ffd76c",
+          fontStyle: "bold"
+        })
+        .setOrigin(0, 0.5)
+        .setDepth(3)
+    );
+
+    this.createButton(centerX - 215, centerY, 118, 28, settings.masterMuted ? "Mute: On" : "Mute: Off", true, () => {
+      this.audioSystem.setMasterMuted(!settings.masterMuted);
+      this.renderContent();
+    }, "secondary");
+
+    this.trackObject(
+      this.add
+        .text(centerX - 98, centerY, "Music", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "16px",
+          color: "#eaf7ff"
+        })
+        .setOrigin(1, 0.5)
+        .setDepth(3)
+    );
+    this.createButton(centerX - 68, centerY, 34, 28, "-", true, () => {
+      this.audioSystem.setMusicVolume(clamp(settings.musicVolume - 0.1, 0, 1));
+      this.renderContent();
+    }, "secondary");
+    this.trackObject(
+      this.add
+        .text(centerX - 2, centerY, `${Math.round(settings.musicVolume * 100)}%`, {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "16px",
+          color: "#9abed8",
+          fontStyle: "bold"
+        })
+        .setOrigin(0.5)
+        .setDepth(3)
+    );
+    this.createButton(centerX + 64, centerY, 34, 28, "+", true, () => {
+      this.audioSystem.setMusicVolume(clamp(settings.musicVolume + 0.1, 0, 1));
+      this.renderContent();
+    }, "secondary");
+
+    this.trackObject(
+      this.add
+        .text(centerX + 140, centerY, "SFX", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "16px",
+          color: "#eaf7ff"
+        })
+        .setOrigin(1, 0.5)
+        .setDepth(3)
+    );
+    this.createButton(centerX + 170, centerY, 34, 28, "-", true, () => {
+      this.audioSystem.setSfxVolume(clamp(settings.sfxVolume - 0.1, 0, 1));
+      this.renderContent();
+    }, "secondary");
+    this.trackObject(
+      this.add
+        .text(centerX + 236, centerY, `${Math.round(settings.sfxVolume * 100)}%`, {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "16px",
+          color: "#9abed8",
+          fontStyle: "bold"
+        })
+        .setOrigin(0.5)
+        .setDepth(3)
+    );
+    this.createButton(centerX + 302, centerY, 34, 28, "+", true, () => {
+      this.audioSystem.setSfxVolume(clamp(settings.sfxVolume + 0.1, 0, 1));
+      this.renderContent();
+    }, "secondary");
   }
 
   private createButton(
@@ -416,9 +517,16 @@ export class MenuScene extends Phaser.Scene {
     }
 
     button.setInteractive({ useHandCursor: true });
-    button.on("pointerover", () => button.setFillStyle(fillColor, 1));
+    button.on("pointerover", () => {
+      button.setFillStyle(fillColor, 1);
+      this.audioSystem.playSfx(SFX_KEYS.UI_HOVER);
+    });
     button.on("pointerout", () => button.setFillStyle(fillColor, alpha));
-    button.on("pointerdown", onClick);
+    button.on("pointerdown", () => {
+      this.handleFirstInteraction();
+      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
+      onClick();
+    });
   }
 
   private startGame(): void {
@@ -435,6 +543,10 @@ export class MenuScene extends Phaser.Scene {
     this.scene.start(SCENE_KEYS.GAME, payload);
   }
 
+  private handleFirstInteraction(): void {
+    this.audioSystem.unlock();
+  }
+
   private async handleGoogleSignIn(): Promise<void> {
     if (this.isAuthBusy) {
       return;
@@ -448,14 +560,14 @@ export class MenuScene extends Phaser.Scene {
     this.isAuthBusy = false;
 
     if (!result.ok) {
-      this.authMessage = result.errorMessage || "Не удалось выполнить вход через Google.";
+      this.authMessage = result.errorMessage || "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РІС…РѕРґ С‡РµСЂРµР· Google.";
       this.authMessageColor = "#ff9eaa";
       this.renderContent();
       return;
     }
 
     this.session = result.session;
-    this.authMessage = "Google-профиль активирован. Будущие результаты теперь помечаются как ranked-eligible.";
+    this.authMessage = "Google-РїСЂРѕС„РёР»СЊ Р°РєС‚РёРІРёСЂРѕРІР°РЅ. Р‘СѓРґСѓС‰РёРµ СЂРµР·СѓР»СЊС‚Р°С‚С‹ С‚РµРїРµСЂСЊ РїРѕРјРµС‡Р°СЋС‚СЃСЏ РєР°Рє ranked-eligible.";
     this.authMessageColor = "#79f7c1";
     this.renderContent();
   }
@@ -473,14 +585,14 @@ export class MenuScene extends Phaser.Scene {
     this.isAuthBusy = false;
 
     if (!result.ok) {
-      this.authMessage = result.errorMessage || "Не удалось выйти из Google-профиля.";
+      this.authMessage = result.errorMessage || "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹Р№С‚Рё РёР· Google-РїСЂРѕС„РёР»СЏ.";
       this.authMessageColor = "#ff9eaa";
       this.renderContent();
       return;
     }
 
     this.session = result.session;
-    this.authMessage = "Профиль переключён в гостевой режим. Следующие результаты останутся только в локальной истории.";
+    this.authMessage = "РџСЂРѕС„РёР»СЊ РїРµСЂРµРєР»СЋС‡С‘РЅ РІ РіРѕСЃС‚РµРІРѕР№ СЂРµР¶РёРј. РЎР»РµРґСѓСЋС‰РёРµ СЂРµР·СѓР»СЊС‚Р°С‚С‹ РѕСЃС‚Р°РЅСѓС‚СЃСЏ С‚РѕР»СЊРєРѕ РІ Р»РѕРєР°Р»СЊРЅРѕР№ РёСЃС‚РѕСЂРёРё.";
     this.authMessageColor = "#ffd76c";
     this.renderContent();
   }
@@ -502,6 +614,8 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private handleShutdown(): void {
+    this.input.off("pointerdown", this.handleFirstInteraction, this);
+    this.input.keyboard?.off("keydown", this.handleFirstInteraction, this);
     this.authUnsubscribe?.();
     this.authUnsubscribe = undefined;
 
