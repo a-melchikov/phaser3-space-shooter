@@ -38,7 +38,7 @@ export class ResultsService {
     if (!canSubmitRankedScore(session)) {
       return {
         status: "skipped",
-        message: "Гостевые сессии остаются только в локальной истории тренировок и не участвуют в ranked results."
+        message: "Гостевой результат сохранён только на этом устройстве."
       };
     }
 

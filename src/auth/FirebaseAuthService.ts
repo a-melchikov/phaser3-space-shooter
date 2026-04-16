@@ -113,7 +113,7 @@ export class FirebaseAuthService implements AuthService {
       return {
         ok: false,
         session,
-        errorMessage: "Не удалось выйти из Google-профиля перед переходом в гостевой режим."
+        errorMessage: "Не удалось выйти из профиля Google перед переходом в гостевой режим."
       };
     }
 
@@ -134,7 +134,7 @@ export class FirebaseAuthService implements AuthService {
       return {
         ok: false,
         session,
-        errorMessage: "Google login недоступен: настройте Firebase env-переменные."
+        errorMessage: "Вход через Google недоступен в этой сборке."
       };
     }
 
@@ -171,7 +171,7 @@ export class FirebaseAuthService implements AuthService {
       return {
         ok: false,
         session,
-        errorMessage: "Не удалось завершить Google-сессию."
+        errorMessage: "Не удалось завершить сеанс Google."
       };
     }
 
@@ -196,7 +196,7 @@ export class FirebaseAuthService implements AuthService {
   private toAuthenticatedSession(user: FirebaseUser): UserSession {
     const authUser: AuthUser = {
       id: user.uid,
-      displayName: user.displayName || user.email || "Google player",
+      displayName: user.displayName || user.email || "Игрок Google",
       email: user.email,
       avatarUrl: user.photoURL,
       provider: "google"
@@ -214,18 +214,18 @@ export class FirebaseAuthService implements AuthService {
     ) {
       switch (error.code) {
         case "auth/popup-closed-by-user":
-          return "Окно Google login было закрыто до завершения входа.";
+          return "Окно входа через Google было закрыто.";
         case "auth/popup-blocked":
-          return "Браузер заблокировал popup для Google login.";
+          return "Браузер заблокировал окно входа через Google.";
         case "auth/cancelled-popup-request":
           return "Запрос на вход через Google был отменён.";
         case "auth/unauthorized-domain":
-          return "Текущий домен не добавлен в список разрешённых доменов Firebase Authentication.";
+          return "Этот домен не разрешён для входа через Google.";
         default:
-          return "Не удалось выполнить вход через Google. Проверьте настройки Firebase Authentication.";
+          return "Не удалось войти через Google. Проверьте настройки Firebase.";
       }
     }
 
-    return "Не удалось выполнить вход через Google.";
+    return "Не удалось войти через Google.";
   }
 }

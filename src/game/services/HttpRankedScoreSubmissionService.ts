@@ -21,7 +21,7 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
     if (!this.backendLeaderboardClient.isConfigured()) {
       return {
         status: "unavailable",
-        message: "Leaderboard backend не настроен. Укажите VITE_API_BASE_URL, чтобы включить ranked submission."
+        message: "Онлайн-таблица сейчас недоступна."
       };
     }
 
@@ -30,7 +30,7 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
     if (!idToken) {
       return {
         status: "failed",
-        message: "Не удалось получить Firebase ID token для ranked submission."
+        message: "Не удалось подтвердить вход для отправки результата."
       };
     }
 
@@ -46,22 +46,22 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
       return {
         status: "submitted",
         message: response.improvedBest
-          ? `Новый ranked best сохранён: ${response.bestScore} очков, волна ${response.bestWave}.`
-          : `Ranked result отправлен. Текущий лучший результат: ${response.bestScore} очков, волна ${response.bestWave}.`
+          ? `Новый лучший онлайн-результат: ${response.bestScore} очков, волна ${response.bestWave}.`
+          : `Результат отправлен. Лучший онлайн-результат: ${response.bestScore} очков, волна ${response.bestWave}.`
       };
     } catch (error) {
       if (error instanceof BackendLeaderboardClientError) {
         if (error.statusCode === 401) {
           return {
             status: "failed",
-            message: "Ranked submission отклонён: требуется валидная авторизованная Google-сессия."
+            message: "Отправка отклонена: нужен действующий вход через Google."
           };
         }
 
         if (error.statusCode === 429) {
           return {
             status: "failed",
-            message: "Слишком много запросов к leaderboard backend. Попробуйте отправить результат чуть позже."
+            message: "Слишком много запросов. Попробуйте отправить результат чуть позже."
           };
         }
 
@@ -73,7 +73,7 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
 
       return {
         status: "failed",
-        message: "Не удалось отправить ranked result из-за неизвестной ошибки."
+        message: "Не удалось отправить результат из-за неизвестной ошибки."
       };
     }
   }

@@ -88,7 +88,7 @@ export class PracticeScoreStore {
       score: entry.score,
       wave: entry.wave,
       date: entry.date,
-      playerLabel: "Локальная практика",
+      playerLabel: "Локальная игра",
       mode: "guest",
       rankedEligible: false
     };
