@@ -7,11 +7,13 @@ import type { GameStartPayload, PracticeScoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, clamp, configureText, formatHighscoreDate } from "../utils/helpers";
-import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
+import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS } from "../utils/constants";
+import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export class MenuScene extends Phaser.Scene {
   private farBackground?: Phaser.GameObjects.TileSprite;
   private nearBackground?: Phaser.GameObjects.TileSprite;
+  private backgroundOverlay?: Phaser.GameObjects.Rectangle;
   private enterKey?: Phaser.Input.Keyboard.Key;
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private authUnsubscribe?: () => void;
@@ -40,6 +42,7 @@ export class MenuScene extends Phaser.Scene {
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.input.on("pointerdown", this.handleFirstInteraction, this);
     this.input.keyboard?.on("keydown", this.handleFirstInteraction, this);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
 
     this.authUnsubscribe = getGameAppContext().authService.subscribe((session) => {
       this.session = session;
@@ -69,26 +72,37 @@ export class MenuScene extends Phaser.Scene {
   private createBackground(): void {
     this.cameras.main.setBackgroundColor("#030712");
     this.farBackground = this.add
-      .tileSprite(0, 0, WORLD_WIDTH, WORLD_HEIGHT, TEXTURE_KEYS.backgroundFar)
+      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundFar)
       .setOrigin(0)
       .setAlpha(0.95);
     this.nearBackground = this.add
-      .tileSprite(0, 0, WORLD_WIDTH, WORLD_HEIGHT, TEXTURE_KEYS.backgroundNear)
+      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundNear)
       .setOrigin(0)
       .setAlpha(0.75);
 
-    this.add.rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, WORLD_WIDTH, WORLD_HEIGHT, 0x040912, 0.22).setDepth(1);
+    this.backgroundOverlay = this.add.rectangle(
+      getViewportCenterX(this),
+      getViewportHeight(this) * 0.5,
+      getViewportWidth(this),
+      getViewportHeight(this),
+      0x040912,
+      0.22
+    ).setDepth(1);
+
+    this.layoutBackground();
   }
 
   private renderContent(): void {
     this.destroyContent();
+    const viewportCenterX = getViewportCenterX(this);
+    const viewportHeight = getViewportHeight(this);
 
     const practiceScores = getGameAppContext().resultsService.getPracticeScores();
     const googleAvailable = getGameAppContext().authService.isGoogleLoginAvailable();
 
     const title = this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 66, GAME_TITLE, {
+        .text(viewportCenterX, 66, GAME_TITLE, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "44px",
           color: "#eaf7ff",
@@ -102,7 +116,7 @@ export class MenuScene extends Phaser.Scene {
 
     const subtitle = this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 106, "Аркадный вылет с guest mode и Google auth foundation", {
+        .text(viewportCenterX, 106, "Аркадный космический шутер", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#9abed8"
@@ -113,24 +127,19 @@ export class MenuScene extends Phaser.Scene {
 
     subtitle.setShadow(0, 0, "#08111f", 8, false, true);
 
-    this.createAuthPanel(182, 306, 300, 320, googleAvailable);
-    this.createControlsPanel(480, 306, 248, 320);
-    this.createPracticePanel(778, 306, 300, 320, practiceScores);
-    this.createAudioPanel(WORLD_WIDTH * 0.5, 480, 720, 36);
+    this.createAuthPanel(viewportCenterX - 298, 306, 300, 320, googleAvailable);
+    this.createControlsPanel(viewportCenterX, 306, 248, 320);
+    this.createPracticePanel(viewportCenterX + 298, 306, 300, 320, practiceScores);
+    this.createAudioPanel(viewportCenterX, viewportHeight - 60, 720, 36);
 
     const quickStart = this.trackObject(
       this.add
-        .text(
-          WORLD_WIDTH * 0.5,
-          WORLD_HEIGHT - 10,
-          "Enter / Space — начать игру текущим режимом. Гость играет полноценно, но остаётся вне ranked results.",
-          {
-            fontFamily: "Segoe UI, sans-serif",
-            fontSize: "15px",
-            color: "#8fb0c7",
-            align: "center"
-          }
-        )
+        .text(viewportCenterX, viewportHeight - 10, "Нажмите Enter или Space, чтобы начать игру.", {
+          fontFamily: "Segoe UI, sans-serif",
+          fontSize: "15px",
+          color: "#8fb0c7",
+          align: "center"
+        })
         .setOrigin(0.5, 1)
         .setDepth(3)
     );
@@ -174,8 +183,8 @@ export class MenuScene extends Phaser.Scene {
     );
 
     const modeDescription = this.session.isGuest
-      ? "Guest mode: можно играть сразу, а результаты попадают только в локальную practice history на этом устройстве."
-      : "Google profile: результаты помечаются как ranked-eligible и готовы для будущей интеграции leaderboard backend.";
+      ? "Можно играть сразу. Результаты сохраняются на этом устройстве."
+      : "Вход через Google выполнен. Можно начинать игру.";
 
     this.trackObject(
       this.add
@@ -197,7 +206,7 @@ export class MenuScene extends Phaser.Scene {
         ? this.isAuthBusy
           ? "Вход через Google..."
           : "Войти через Google"
-        : "Google login недоступен";
+        : "Вход через Google недоступен";
       this.createButton(
         centerX,
         centerY + 108,
@@ -209,7 +218,7 @@ export class MenuScene extends Phaser.Scene {
         "secondary"
       );
     } else {
-      const signOutLabel = this.isAuthBusy ? "Выход..." : "Выйти в гостя";
+      const signOutLabel = this.isAuthBusy ? "Выход..." : "Перейти в гостевой режим";
       this.createButton(
         centerX,
         centerY + 108,
@@ -222,21 +231,19 @@ export class MenuScene extends Phaser.Scene {
       );
     }
 
-    const availabilityText = googleAvailable
-      ? "Google login активируется через Firebase Authentication и восстанавливает сессию после reload."
-      : "Для Google login добавьте Firebase env-переменные из .env.example и включите Google provider в Firebase Console.";
-
-    this.trackObject(
-      this.add
-        .text(centerX - 112, centerY + 142, availabilityText, {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "13px",
-          color: googleAvailable ? "#85d8ff" : "#ffd76c",
-          wordWrap: { width: 224 },
-          lineSpacing: 5
-        })
-        .setDepth(3)
-    );
+    if (!googleAvailable) {
+      this.trackObject(
+        this.add
+          .text(centerX - 112, centerY + 142, "В этой сборке доступна только гостевая игра.", {
+            fontFamily: "Segoe UI, sans-serif",
+            fontSize: "13px",
+            color: "#ffd76c",
+            wordWrap: { width: 224 },
+            lineSpacing: 5
+          })
+          .setDepth(3)
+      );
+    }
 
     if (this.authMessage.trim().length > 0) {
       this.trackObject(
@@ -275,10 +282,10 @@ export class MenuScene extends Phaser.Scene {
 
     const lines = [
       "Стрелки — движение корабля",
-      "Space — стрельба с cooldown",
-      "P — пауза во время боя",
-      "R — рестарт только после поражения",
-      "Esc — возврат в меню с экрана Game Over"
+      "Space — выстрел",
+      "Esc или P — пауза",
+      "R — начать заново после поражения",
+      "Esc — выйти в меню с экрана поражения"
     ];
 
     lines.forEach((line, index) => {
@@ -293,23 +300,6 @@ export class MenuScene extends Phaser.Scene {
           .setDepth(3)
       );
     });
-
-    this.trackObject(
-      this.add
-        .text(
-          centerX - 92,
-          centerY + 118,
-          "Guest и Google играют в одну и ту же игру. Разница только в том, считается ли результат ranked-eligible.",
-          {
-            fontFamily: "Segoe UI, sans-serif",
-            fontSize: "13px",
-            color: "#9abed8",
-            wordWrap: { width: 188 },
-            lineSpacing: 5
-          }
-        )
-        .setDepth(3)
-    );
   }
 
   private createPracticePanel(
@@ -328,7 +318,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX, centerY - 128, "Локальная практика", {
+        .text(centerX, centerY - 128, "Лучшие результаты", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "26px",
           color: "#ffd76c",
@@ -340,7 +330,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX, centerY - 96, "Это не leaderboard. Здесь только local practice history на устройстве.", {
+        .text(centerX, centerY - 96, "Сохраняются на этом устройстве.", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "13px",
           color: "#9abed8",
@@ -354,7 +344,7 @@ export class MenuScene extends Phaser.Scene {
     if (scores.length === 0) {
       this.trackObject(
         this.add
-          .text(centerX, centerY - 6, "Пока нет локальных тренировочных результатов.", {
+          .text(centerX, centerY - 6, "Пока здесь пусто. Сыграйте первый матч.", {
             fontFamily: "Segoe UI, sans-serif",
             fontSize: "16px",
             color: "#eaf7ff",
@@ -368,7 +358,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     scores.forEach((entry, index) => {
-      const label = entry.rankedEligible ? "eligible" : "practice";
+      const label = entry.rankedEligible ? "онлайн" : "локально";
       this.trackObject(
         this.add
           .text(
@@ -400,7 +390,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX - 330, centerY, "Audio", {
+        .text(centerX - 330, centerY, "Звук", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#ffd76c",
@@ -410,14 +400,14 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(3)
     );
 
-    this.createButton(centerX - 215, centerY, 118, 28, settings.masterMuted ? "Mute: On" : "Mute: Off", true, () => {
+    this.createButton(centerX - 215, centerY, 118, 28, settings.masterMuted ? "Звук: выкл" : "Звук: вкл", true, () => {
       this.audioSystem.setMasterMuted(!settings.masterMuted);
       this.renderContent();
     }, "secondary");
 
     this.trackObject(
       this.add
-        .text(centerX - 98, centerY, "Music", {
+        .text(centerX - 98, centerY, "Музыка", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "16px",
           color: "#eaf7ff"
@@ -447,7 +437,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(centerX + 140, centerY, "SFX", {
+        .text(centerX + 140, centerY, "Эффекты", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "16px",
           color: "#eaf7ff"
@@ -560,14 +550,14 @@ export class MenuScene extends Phaser.Scene {
     this.isAuthBusy = false;
 
     if (!result.ok) {
-      this.authMessage = result.errorMessage || "Не удалось выполнить вход через Google.";
+      this.authMessage = result.errorMessage || "Не удалось войти через Google.";
       this.authMessageColor = "#ff9eaa";
       this.renderContent();
       return;
     }
 
     this.session = result.session;
-    this.authMessage = "Google-профиль активирован. Будущие результаты теперь помечаются как ranked-eligible.";
+    this.authMessage = "Вход через Google выполнен.";
     this.authMessageColor = "#79f7c1";
     this.renderContent();
   }
@@ -585,14 +575,14 @@ export class MenuScene extends Phaser.Scene {
     this.isAuthBusy = false;
 
     if (!result.ok) {
-      this.authMessage = result.errorMessage || "Не удалось выйти из Google-профиля.";
+      this.authMessage = result.errorMessage || "Не удалось выйти из профиля Google.";
       this.authMessageColor = "#ff9eaa";
       this.renderContent();
       return;
     }
 
     this.session = result.session;
-    this.authMessage = "Профиль переключён в гостевой режим. Следующие результаты останутся только в локальной истории.";
+    this.authMessage = "Включён гостевой режим.";
     this.authMessageColor = "#ffd76c";
     this.renderContent();
   }
@@ -613,9 +603,24 @@ export class MenuScene extends Phaser.Scene {
     }
   }
 
+  private layoutBackground(): void {
+    const viewportWidth = getViewportWidth(this);
+    const viewportHeight = getViewportHeight(this);
+
+    this.farBackground?.setSize(viewportWidth, viewportHeight);
+    this.nearBackground?.setSize(viewportWidth, viewportHeight);
+    this.backgroundOverlay?.setPosition(getViewportCenterX(this), viewportHeight * 0.5).setSize(viewportWidth, viewportHeight);
+  }
+
+  private handleResize(): void {
+    this.layoutBackground();
+    this.renderContent();
+  }
+
   private handleShutdown(): void {
     this.input.off("pointerdown", this.handleFirstInteraction, this);
     this.input.keyboard?.off("keydown", this.handleFirstInteraction, this);
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.authUnsubscribe?.();
     this.authUnsubscribe = undefined;
 
@@ -632,6 +637,7 @@ export class MenuScene extends Phaser.Scene {
     this.destroyContent();
     this.farBackground = undefined;
     this.nearBackground = undefined;
+    this.backgroundOverlay = undefined;
     this.isStarting = false;
     this.isAuthBusy = false;
     this.authMessage = "";

@@ -7,11 +7,13 @@ import type { CompletedRunResult, GameOverPayload, GameStartPayload, PracticeSco
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, configureText, formatHighscoreDate } from "../utils/helpers";
-import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
+import { GAME_TITLE, TEXTURE_KEYS, UI_COLORS } from "../utils/constants";
+import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export class GameOverScene extends Phaser.Scene {
   private farBackground?: Phaser.GameObjects.TileSprite;
   private nearBackground?: Phaser.GameObjects.TileSprite;
+  private backgroundOverlay?: Phaser.GameObjects.Rectangle;
   private restartKey?: Phaser.Input.Keyboard.Key;
   private menuKey?: Phaser.Input.Keyboard.Key;
   private audioSystem!: AudioSystem;
@@ -28,6 +30,8 @@ export class GameOverScene extends Phaser.Scene {
   private restartRequested = false;
   private readonly contentObjects: Phaser.GameObjects.GameObject[] = [];
   private rankedStatusText?: Phaser.GameObjects.Text;
+  private rankedStatusMessage = "Проверяем сохранение результата...";
+  private rankedStatusColor = "#9abed8";
 
   public constructor() {
     super(SCENE_KEYS.GAME_OVER);
@@ -57,6 +61,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.restartKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R);
     this.menuKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
   }
@@ -88,22 +93,34 @@ export class GameOverScene extends Phaser.Scene {
   private createBackground(): void {
     this.cameras.main.setBackgroundColor("#16060d");
     this.farBackground = this.add
-      .tileSprite(0, 0, WORLD_WIDTH, WORLD_HEIGHT, TEXTURE_KEYS.backgroundFar)
+      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundFar)
       .setOrigin(0)
       .setTint(0x9a3650);
     this.nearBackground = this.add
-      .tileSprite(0, 0, WORLD_WIDTH, WORLD_HEIGHT, TEXTURE_KEYS.backgroundNear)
+      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundNear)
       .setOrigin(0)
       .setTint(0xc26f7c)
       .setAlpha(0.6);
 
-    this.add.rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, WORLD_WIDTH, WORLD_HEIGHT, 0x10030a, 0.52);
+    this.backgroundOverlay = this.add.rectangle(
+      getViewportCenterX(this),
+      getViewportHeight(this) * 0.5,
+      getViewportWidth(this),
+      getViewportHeight(this),
+      0x10030a,
+      0.52
+    );
+
+    this.layoutBackground();
   }
 
   private createContent(scores: PracticeScoreEntry[], session: UserSession): void {
+    const viewportCenterX = getViewportCenterX(this);
+    const viewportHeight = getViewportHeight(this);
+
     const title = this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 72, "GAME OVER", {
+        .text(viewportCenterX, 72, "ПОРАЖЕНИЕ", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "48px",
           color: "#ffdce2",
@@ -116,7 +133,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 112, GAME_TITLE, {
+        .text(viewportCenterX, 112, GAME_TITLE, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#f1b9c3"
@@ -126,13 +143,13 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .rectangle(WORLD_WIDTH * 0.5, 210, 520, 138, UI_COLORS.panel, 0.9)
+        .rectangle(viewportCenterX, 210, 520, 138, UI_COLORS.panel, 0.9)
         .setStrokeStyle(2, UI_COLORS.danger, 0.28)
     );
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 170, `Итоговый счёт: ${this.payload.score}`, {
+        .text(viewportCenterX, 170, `Итоговый счёт: ${this.payload.score}`, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "28px",
           color: "#ffffff",
@@ -144,7 +161,7 @@ export class GameOverScene extends Phaser.Scene {
     const sessionLabel = session.isGuest ? "Гость" : `${session.displayName} • Google`;
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 208, `Волна: ${this.payload.wave} • Профиль: ${sessionLabel}`, {
+        .text(viewportCenterX, 208, `Волна: ${this.payload.wave} • Профиль: ${sessionLabel}`, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "20px",
           color: "#f5c0cb"
@@ -153,12 +170,12 @@ export class GameOverScene extends Phaser.Scene {
     );
 
     const modeSummary = session.isGuest
-      ? "Гостевой вылет: результат сохранён только в локальной practice history."
-      : "Google-профиль: результат сохранён локально и помечен как ranked-eligible для будущего leaderboard backend.";
+      ? "Результат сохранён на этом устройстве."
+      : "Результат сохранён и отправлен в онлайн-таблицу, если она доступна.";
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 240, modeSummary, {
+        .text(viewportCenterX, 240, modeSummary, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "15px",
           color: session.isGuest ? "#ffd76c" : "#79f7c1",
@@ -170,10 +187,10 @@ export class GameOverScene extends Phaser.Scene {
 
     this.rankedStatusText = this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 272, "Проверяем статус ranked submission...", {
+        .text(viewportCenterX, 272, this.rankedStatusMessage, {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "14px",
-          color: "#9abed8",
+          color: this.rankedStatusColor,
           wordWrap: { width: 460 },
           align: "center"
         })
@@ -182,13 +199,13 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .rectangle(WORLD_WIDTH * 0.5, 414, 620, 228, UI_COLORS.panel, 0.9)
+        .rectangle(viewportCenterX, 414, 620, 228, UI_COLORS.panel, 0.9)
         .setStrokeStyle(2, UI_COLORS.cyan, 0.22)
     );
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, 322, "Локальная практика", {
+        .text(viewportCenterX, 322, "Лучшие результаты", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "26px",
           color: "#ffd76c",
@@ -198,11 +215,11 @@ export class GameOverScene extends Phaser.Scene {
     );
 
     scores.forEach((entry, index) => {
-      const modeLabel = entry.rankedEligible ? "eligible" : "practice";
+      const modeLabel = entry.rankedEligible ? "онлайн" : "локально";
       this.trackObject(
         this.add
           .text(
-            WORLD_WIDTH * 0.5,
+            viewportCenterX,
             360 + index * 30,
             `#${index + 1} — ${entry.score} очков • волна ${entry.wave} • ${entry.playerLabel} • ${modeLabel} • ${formatHighscoreDate(entry.date)}`,
             {
@@ -219,7 +236,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.trackObject(
       this.add
-        .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT - 28, "R — заново • Esc — вернуться в меню", {
+        .text(viewportCenterX, viewportHeight - 28, "R — заново • Esc — в меню", {
           fontFamily: "Segoe UI, sans-serif",
           fontSize: "18px",
           color: "#9abed8"
@@ -244,6 +261,8 @@ export class GameOverScene extends Phaser.Scene {
             ? "#9abed8"
             : "#79f7c1";
 
+    this.rankedStatusColor = color;
+    this.rankedStatusMessage = outcome.message;
     this.rankedStatusText.setColor(color);
     this.rankedStatusText.setText(outcome.message);
   }
@@ -264,7 +283,24 @@ export class GameOverScene extends Phaser.Scene {
     }
   }
 
+  private layoutBackground(): void {
+    const viewportWidth = getViewportWidth(this);
+    const viewportHeight = getViewportHeight(this);
+
+    this.farBackground?.setSize(viewportWidth, viewportHeight);
+    this.nearBackground?.setSize(viewportWidth, viewportHeight);
+    this.backgroundOverlay?.setPosition(getViewportCenterX(this), viewportHeight * 0.5).setSize(viewportWidth, viewportHeight);
+  }
+
+  private handleResize(): void {
+    this.layoutBackground();
+    this.destroyContent();
+    this.createContent(getGameAppContext().resultsService.getPracticeScores(), getGameAppContext().authService.getSession());
+  }
+
   private handleShutdown(): void {
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+
     if (this.restartKey) {
       this.input.keyboard?.removeKey(this.restartKey);
       this.restartKey = undefined;
@@ -278,7 +314,10 @@ export class GameOverScene extends Phaser.Scene {
     this.destroyContent();
     this.farBackground = undefined;
     this.nearBackground = undefined;
+    this.backgroundOverlay = undefined;
     this.restartRequested = false;
     this.rankedStatusText = undefined;
+    this.rankedStatusMessage = "Проверяем сохранение результата...";
+    this.rankedStatusColor = "#9abed8";
   }
 }

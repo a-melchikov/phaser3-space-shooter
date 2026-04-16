@@ -2,14 +2,19 @@ import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
 import type { ActivePowerUpState, SessionPresentation } from "../types/game";
-import { AudioSystem } from "./AudioSystem";
 import { SFX_KEYS } from "../utils/audioKeys";
-import { UI_COLORS, WORLD_HEIGHT, WORLD_WIDTH } from "../utils/constants";
+import { UI_COLORS } from "../utils/constants";
 import { clamp, configureText } from "../utils/helpers";
+import { getViewportCenterX, getViewportCenterY, getViewportHeight, getViewportWidth } from "../utils/viewport";
+import { AudioSystem } from "./AudioSystem";
 
 interface PauseButton {
   background: Phaser.GameObjects.Rectangle;
   label: Phaser.GameObjects.Text;
+}
+
+interface UISystemOptions {
+  onPauseExitToMenu?: () => void;
 }
 
 export class UISystem {
@@ -41,8 +46,14 @@ export class UISystem {
 
   public constructor(
     private readonly scene: Phaser.Scene,
-    private readonly audioSystem: AudioSystem
+    private readonly audioSystem: AudioSystem,
+    private readonly options: UISystemOptions = {}
   ) {
+    const viewportWidth = getViewportWidth(scene);
+    const viewportHeight = getViewportHeight(scene);
+    const viewportCenterX = getViewportCenterX(scene);
+    const viewportCenterY = getViewportCenterY(scene);
+
     const panel = scene.add
       .rectangle(208, 58, 404, 90, UI_COLORS.panel, 0.86)
       .setStrokeStyle(2, UI_COLORS.cyan, 0.14)
@@ -101,7 +112,7 @@ export class UISystem {
       .setDepth(52);
 
     this.waveText = scene.add
-      .text(WORLD_WIDTH - 18, 18, "Волна: 1", {
+      .text(viewportWidth - 18, 18, "Волна: 1", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#6ef2ff",
@@ -112,7 +123,7 @@ export class UISystem {
       .setDepth(52);
 
     this.powerUpText = scene.add
-      .text(WORLD_WIDTH - 18, 44, "Бонусы: нет", {
+      .text(viewportWidth - 18, 44, "Бонусы: нет", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "14px",
         color: "#9abed8"
@@ -122,7 +133,7 @@ export class UISystem {
       .setDepth(52);
 
     this.sessionText = scene.add
-      .text(WORLD_WIDTH - 18, 66, "Профиль: гость", {
+      .text(viewportWidth - 18, 66, "Профиль: гость", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "13px",
         color: "#8bcfff"
@@ -132,7 +143,7 @@ export class UISystem {
       .setDepth(52);
 
     this.rankedText = scene.add
-      .text(WORLD_WIDTH - 18, 84, "Режим: local practice", {
+      .text(viewportWidth - 18, 84, "Результаты: только локально", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "13px",
         color: "#9abed8"
@@ -142,20 +153,20 @@ export class UISystem {
       .setDepth(52);
 
     this.bossBarBg = scene.add
-      .rectangle(WORLD_WIDTH * 0.5, 104, 340, 16, 0x16253d, 1)
+      .rectangle(viewportCenterX, 104, 340, 16, 0x16253d, 1)
       .setScrollFactor(0)
       .setDepth(52)
       .setVisible(false);
 
     this.bossBarFill = scene.add
-      .rectangle(WORLD_WIDTH * 0.5 - 170, 104, 340, 16, UI_COLORS.danger, 1)
+      .rectangle(viewportCenterX - 170, 104, 340, 16, UI_COLORS.danger, 1)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(53)
       .setVisible(false);
 
     this.bossBarText = scene.add
-      .text(WORLD_WIDTH * 0.5, 80, "", {
+      .text(viewportCenterX, 80, "", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "14px",
         color: "#ffdce2"
@@ -166,20 +177,20 @@ export class UISystem {
       .setVisible(false);
 
     this.pauseOverlay = scene.add
-      .rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, WORLD_WIDTH, WORLD_HEIGHT, 0x000000, 0.45)
+      .rectangle(viewportCenterX, viewportCenterY, viewportWidth, viewportHeight, 0x000000, 0.45)
       .setScrollFactor(0)
       .setDepth(120)
       .setVisible(false);
 
     this.pausePanel = scene.add
-      .rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, 420, 236, UI_COLORS.panel, 0.94)
+      .rectangle(viewportCenterX, viewportCenterY, 420, 292, UI_COLORS.panel, 0.94)
       .setStrokeStyle(2, UI_COLORS.cyan, 0.28)
       .setScrollFactor(0)
       .setDepth(121)
       .setVisible(false);
 
     this.pauseText = scene.add
-      .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5 - 86, "Пауза", {
+      .text(viewportCenterX, viewportCenterY - 86, "Пауза", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "48px",
         color: "#eaf7ff",
@@ -191,7 +202,7 @@ export class UISystem {
       .setVisible(false);
 
     this.pauseHintText = scene.add
-      .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5 - 50, "P - resume", {
+      .text(viewportCenterX, viewportCenterY - 50, "Esc или P — продолжить", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "16px",
         color: "#9abed8"
@@ -202,7 +213,7 @@ export class UISystem {
       .setVisible(false);
 
     const pauseAudioHeader = scene.add
-      .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5 - 14, "Audio", {
+      .text(viewportCenterX, viewportCenterY - 14, "Звук", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "20px",
         color: "#ffd76c",
@@ -214,7 +225,7 @@ export class UISystem {
       .setVisible(false);
 
     const muteLabel = scene.add
-      .text(WORLD_WIDTH * 0.5 - 128, WORLD_HEIGHT * 0.5 + 24, "Mute", {
+      .text(viewportCenterX - 128, viewportCenterY + 24, "Общий звук", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#eaf7ff"
@@ -224,7 +235,7 @@ export class UISystem {
       .setVisible(false);
 
     const musicLabel = scene.add
-      .text(WORLD_WIDTH * 0.5 - 128, WORLD_HEIGHT * 0.5 + 64, "Music", {
+      .text(viewportCenterX - 128, viewportCenterY + 64, "Музыка", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#eaf7ff"
@@ -234,7 +245,7 @@ export class UISystem {
       .setVisible(false);
 
     const sfxLabel = scene.add
-      .text(WORLD_WIDTH * 0.5 - 128, WORLD_HEIGHT * 0.5 + 104, "SFX", {
+      .text(viewportCenterX - 128, viewportCenterY + 104, "Эффекты", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#eaf7ff"
@@ -244,7 +255,7 @@ export class UISystem {
       .setVisible(false);
 
     this.pauseMuteValueText = scene.add
-      .text(WORLD_WIDTH * 0.5 + 18, WORLD_HEIGHT * 0.5 + 24, "Off", {
+      .text(viewportCenterX + 18, viewportCenterY + 24, "Вкл", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#9abed8",
@@ -256,7 +267,7 @@ export class UISystem {
       .setVisible(false);
 
     this.pauseMusicValueText = scene.add
-      .text(WORLD_WIDTH * 0.5 + 18, WORLD_HEIGHT * 0.5 + 64, "55%", {
+      .text(viewportCenterX + 18, viewportCenterY + 64, "55%", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#9abed8",
@@ -268,7 +279,7 @@ export class UISystem {
       .setVisible(false);
 
     this.pauseSfxValueText = scene.add
-      .text(WORLD_WIDTH * 0.5 + 18, WORLD_HEIGHT * 0.5 + 104, "80%", {
+      .text(viewportCenterX + 18, viewportCenterY + 104, "80%", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "18px",
         color: "#9abed8",
@@ -280,7 +291,7 @@ export class UISystem {
       .setVisible(false);
 
     this.bannerText = scene.add
-      .text(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.42, "", {
+      .text(viewportCenterX, viewportHeight * 0.42, "", {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "34px",
         color: "#eaf7ff",
@@ -321,40 +332,45 @@ export class UISystem {
       this.bannerText
     );
 
-    this.createPauseButton(WORLD_WIDTH * 0.5 + 130, WORLD_HEIGHT * 0.5 + 39, 118, 30, "Toggle", () => {
+    this.createPauseButton(viewportCenterX + 130, viewportCenterY + 39, 118, 30, "Переключить", () => {
       const settings = this.audioSystem.getSettings();
       this.audioSystem.unlock();
       this.audioSystem.setMasterMuted(!settings.masterMuted);
       this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.refreshAudioSettings();
     });
-    this.createPauseButton(WORLD_WIDTH * 0.5 - 16, WORLD_HEIGHT * 0.5 + 79, 34, 30, "-", () => {
+    this.createPauseButton(viewportCenterX - 16, viewportCenterY + 79, 34, 30, "-", () => {
       const settings = this.audioSystem.getSettings();
       this.audioSystem.unlock();
       this.audioSystem.setMusicVolume(clamp(settings.musicVolume - 0.1, 0, 1));
       this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.refreshAudioSettings();
     });
-    this.createPauseButton(WORLD_WIDTH * 0.5 + 54, WORLD_HEIGHT * 0.5 + 79, 34, 30, "+", () => {
+    this.createPauseButton(viewportCenterX + 54, viewportCenterY + 79, 34, 30, "+", () => {
       const settings = this.audioSystem.getSettings();
       this.audioSystem.unlock();
       this.audioSystem.setMusicVolume(clamp(settings.musicVolume + 0.1, 0, 1));
       this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.refreshAudioSettings();
     });
-    this.createPauseButton(WORLD_WIDTH * 0.5 - 16, WORLD_HEIGHT * 0.5 + 119, 34, 30, "-", () => {
+    this.createPauseButton(viewportCenterX - 16, viewportCenterY + 119, 34, 30, "-", () => {
       const settings = this.audioSystem.getSettings();
       this.audioSystem.unlock();
       this.audioSystem.setSfxVolume(clamp(settings.sfxVolume - 0.1, 0, 1));
       this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.refreshAudioSettings();
     });
-    this.createPauseButton(WORLD_WIDTH * 0.5 + 54, WORLD_HEIGHT * 0.5 + 119, 34, 30, "+", () => {
+    this.createPauseButton(viewportCenterX + 54, viewportCenterY + 119, 34, 30, "+", () => {
       const settings = this.audioSystem.getSettings();
       this.audioSystem.unlock();
       this.audioSystem.setSfxVolume(clamp(settings.sfxVolume + 0.1, 0, 1));
       this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.refreshAudioSettings();
+    });
+    this.createPauseButton(viewportCenterX, viewportCenterY + 168, 186, 36, "Главное меню", () => {
+      this.audioSystem.unlock();
+      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
+      this.options.onPauseExitToMenu?.();
     });
 
     this.hudObjects.forEach((object) => {
@@ -373,7 +389,7 @@ export class UISystem {
 
   public setSessionStatus(session: SessionPresentation): void {
     this.sessionText.setText(session.isGuest ? "Профиль: гость" : `Профиль: ${session.displayName}`);
-    this.rankedText.setText(session.rankedEligible ? "Режим: ranked-eligible" : "Режим: local practice");
+    this.rankedText.setText(session.rankedEligible ? "Результаты: локально и онлайн" : "Результаты: только локально");
     this.rankedText.setColor(session.rankedEligible ? "#79f7c1" : "#9abed8");
   }
 
@@ -423,7 +439,6 @@ export class UISystem {
     }
 
     const text = effects.map((effect) => `${effect.label} ${(effect.remainingMs / 1000).toFixed(1)}с`).join(" • ");
-
     this.powerUpText.setText(`Бонусы: ${text}`);
   }
 
@@ -532,7 +547,7 @@ export class UISystem {
   private refreshAudioSettings(): void {
     const settings = this.audioSystem.getSettings();
 
-    this.pauseMuteValueText.setText(settings.masterMuted ? "On" : "Off");
+    this.pauseMuteValueText.setText(settings.masterMuted ? "Выкл" : "Вкл");
     this.pauseMuteValueText.setColor(settings.masterMuted ? "#ff9eaa" : "#79f7c1");
     this.pauseMusicValueText.setText(`${Math.round(settings.musicVolume * 100)}%`);
     this.pauseSfxValueText.setText(`${Math.round(settings.sfxVolume * 100)}%`);

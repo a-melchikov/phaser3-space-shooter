@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 
 import { Boss, BOSS_EVENTS } from "../entities/Boss";
 import { Enemy, ENEMY_EVENTS } from "../entities/Enemy";
@@ -22,16 +22,17 @@ import {
   POWER_UP_LABELS,
   SCORE_VALUES,
   TEXTURE_KEYS,
-  UI_COLORS,
-  WORLD_HEIGHT,
-  WORLD_WIDTH
+  UI_COLORS
 } from "../utils/constants";
 import { getEnemySpawnX, getEnemySpawnY } from "../utils/enemyFactory";
 import { chance, pickRandom, randomBetween } from "../utils/helpers";
+import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export class GameScene extends Phaser.Scene {
   private farBackground?: Phaser.GameObjects.TileSprite;
   private nearBackground?: Phaser.GameObjects.TileSprite;
+  private backgroundOverlay?: Phaser.GameObjects.Rectangle;
+  private footerText?: Phaser.GameObjects.Text;
 
   private player!: Player;
   private audioSystem!: AudioSystem;
@@ -48,7 +49,7 @@ export class GameScene extends Phaser.Scene {
   private readonly trackedEnemies = new WeakSet<Enemy>();
   private readonly trackedBosses = new WeakSet<Boss>();
   private controls?: PlayerControls;
-  private pauseKey?: Phaser.Input.Keyboard.Key;
+  private pauseKeys: Phaser.Input.Keyboard.Key[] = [];
   private isPaused = false;
   private isTransitioning = true;
   private isFinishing = false;
@@ -74,10 +75,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   public create(): void {
+    const viewportWidth = getViewportWidth(this);
+    const viewportHeight = getViewportHeight(this);
+
     this.cameras.main.setBackgroundColor("#030712");
     this.physics.world.resume();
     this.time.timeScale = 1;
-    this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    this.physics.world.setBounds(0, 0, viewportWidth, viewportHeight);
 
     this.audioSystem = AudioSystem.getInstance(this);
     this.audioSystem.playMusic(MUSIC_KEYS.GAMEPLAY);
@@ -87,7 +91,9 @@ export class GameScene extends Phaser.Scene {
     this.createPlayer();
     this.createInput();
 
-    this.uiSystem = new UISystem(this, this.audioSystem);
+    this.uiSystem = new UISystem(this, this.audioSystem, {
+      onPauseExitToMenu: () => this.exitToMainMenu()
+    });
     this.uiSystem.bindPlayer(this.player);
     this.uiSystem.setScore(this.score);
     this.uiSystem.setWave(1);
@@ -137,13 +143,18 @@ export class GameScene extends Phaser.Scene {
     this.waveManager = new WaveManager(this, callbacks);
     this.waveManager.startRun();
 
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
   }
 
   public override update(time: number, delta: number): void {
     this.scrollBackground(delta);
 
-    if (this.pauseKey && Phaser.Input.Keyboard.JustDown(this.pauseKey) && !this.isFinishing) {
+    if (
+      !this.isFinishing &&
+      this.pauseKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))
+    ) {
       this.togglePause();
     }
 
@@ -174,18 +185,25 @@ export class GameScene extends Phaser.Scene {
 
   private createBackground(): void {
     this.farBackground = this.add
-      .tileSprite(0, 0, WORLD_WIDTH, WORLD_HEIGHT, TEXTURE_KEYS.backgroundFar)
+      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundFar)
       .setOrigin(0)
       .setAlpha(0.95);
 
     this.nearBackground = this.add
-      .tileSprite(0, 0, WORLD_WIDTH, WORLD_HEIGHT, TEXTURE_KEYS.backgroundNear)
+      .tileSprite(0, 0, getViewportWidth(this), getViewportHeight(this), TEXTURE_KEYS.backgroundNear)
       .setOrigin(0)
       .setAlpha(0.74);
 
-    this.add.rectangle(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5, WORLD_WIDTH, WORLD_HEIGHT, 0x05101f, 0.14);
-    this.add
-      .text(WORLD_WIDTH - 16, WORLD_HEIGHT - 18, `${GAME_TITLE} • Phaser 3`, {
+    this.backgroundOverlay = this.add.rectangle(
+      getViewportCenterX(this),
+      getViewportHeight(this) * 0.5,
+      getViewportWidth(this),
+      getViewportHeight(this),
+      0x05101f,
+      0.14
+    );
+    this.footerText = this.add
+      .text(getViewportWidth(this) - 16, getViewportHeight(this) - 18, `${GAME_TITLE} • Phaser 3`, {
         fontFamily: "Segoe UI, sans-serif",
         fontSize: "12px",
         color: "#6f8ba3"
@@ -193,6 +211,8 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(1, 1)
       .setScrollFactor(0)
       .setDepth(40);
+
+    this.layoutBackground();
   }
 
   private createGroups(): void {
@@ -246,7 +266,10 @@ export class GameScene extends Phaser.Scene {
       down: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
       fire: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
     };
-    this.pauseKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+    this.pauseKeys = [
+      keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
+      keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P)
+    ];
   }
 
   private spawnEnemy(type: EnemyType): void {
@@ -257,7 +280,7 @@ export class GameScene extends Phaser.Scene {
 
     this.bindEnemyAudioEvents(enemy);
 
-    const x = getEnemySpawnX(type === "heavy");
+    const x = getEnemySpawnX(getViewportWidth(this), type === "heavy");
     const y = getEnemySpawnY();
     enemy.spawn(type, this.waveManager.getCurrentWave(), x, y, this.time.now);
   }
@@ -479,6 +502,16 @@ export class GameScene extends Phaser.Scene {
     this.physics?.world?.resume();
   }
 
+  private exitToMainMenu(): void {
+    if (this.isFinishing) {
+      return;
+    }
+
+    this.forceResumeRuntimeState();
+    this.audioSystem.stopAllSfx();
+    this.scene.start(SCENE_KEYS.MENU);
+  }
+
   private stopCombatMotion(): void {
     if (this.player?.active) {
       this.player.setVelocity(0, 0);
@@ -563,6 +596,59 @@ export class GameScene extends Phaser.Scene {
     this.nearBackground?.setTilePosition(0, this.nearBackground.tilePositionY + delta * 0.02);
   }
 
+  private layoutBackground(): void {
+    const viewportWidth = getViewportWidth(this);
+    const viewportHeight = getViewportHeight(this);
+
+    this.farBackground?.setSize(viewportWidth, viewportHeight);
+    this.nearBackground?.setSize(viewportWidth, viewportHeight);
+    this.backgroundOverlay?.setPosition(getViewportCenterX(this), viewportHeight * 0.5).setSize(viewportWidth, viewportHeight);
+    this.footerText?.setPosition(viewportWidth - 16, viewportHeight - 18);
+  }
+
+  private refreshUiLayout(): void {
+    if (!this.uiSystem) {
+      return;
+    }
+
+    this.uiSystem.destroy();
+    this.uiSystem = new UISystem(this, this.audioSystem, {
+      onPauseExitToMenu: () => this.exitToMainMenu()
+    });
+    this.uiSystem.bindPlayer(this.player);
+    this.uiSystem.setScore(this.score);
+    this.uiSystem.setWave(this.waveManager?.getCurrentWave() ?? 1);
+    this.uiSystem.setPowerUps(this.player?.active ? this.player.getActivePowerUps(this.time.now) : []);
+    this.uiSystem.setBossHealth(this.activeBoss?.health ?? 0, this.activeBoss?.maxHealth ?? 0);
+    this.uiSystem.setSessionStatus(this.runSession);
+    this.uiSystem.showPauseOverlay(this.isPaused);
+  }
+
+  private handleResize(): void {
+    const viewportWidth = getViewportWidth(this);
+    const viewportHeight = getViewportHeight(this);
+
+    this.physics.world.setBounds(0, 0, viewportWidth, viewportHeight);
+    this.layoutBackground();
+    this.refreshUiLayout();
+
+    if (this.player?.active) {
+      this.player.setPosition(
+        Phaser.Math.Clamp(this.player.x, this.player.displayWidth * 0.5, viewportWidth - this.player.displayWidth * 0.5),
+        Phaser.Math.Clamp(this.player.y, this.player.displayHeight * 0.5, viewportHeight - this.player.displayHeight * 0.5)
+      );
+    }
+
+    if (this.activeBoss?.active) {
+      const minX = this.activeBoss.displayWidth * 0.5 + 28;
+      const maxX = viewportWidth - this.activeBoss.displayWidth * 0.5 - 28;
+      this.activeBoss.setPosition(
+        Phaser.Math.Clamp(this.activeBoss.x, minX, Math.max(minX, maxX)),
+        this.activeBoss.y
+      );
+    }
+  }
+
   private bindEnemyAudioEvents(enemy: Enemy): void {
     if (this.trackedEnemies.has(enemy)) {
       return;
@@ -631,6 +717,7 @@ export class GameScene extends Phaser.Scene {
     this.waveManager?.shutdown();
     this.collisionManager?.destroy();
     this.uiSystem?.destroy();
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
 
     this.clearProjectiles();
     this.destroyGroupMembers(this.enemies);
@@ -648,16 +735,18 @@ export class GameScene extends Phaser.Scene {
       this.controls = undefined;
     }
 
-    if (this.pauseKey) {
-      this.input.keyboard?.removeKey(this.pauseKey);
-      this.pauseKey = undefined;
-    }
+    this.pauseKeys.forEach((key) => {
+      this.input.keyboard?.removeKey(key);
+    });
+    this.pauseKeys = [];
 
     this.player?.off(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
     this.player?.destroy();
     this.activeBoss = undefined;
     this.farBackground = undefined;
     this.nearBackground = undefined;
+    this.backgroundOverlay = undefined;
+    this.footerText = undefined;
     this.physics?.world?.resume();
     this.time.timeScale = 1;
     this.tweens?.killAll();
@@ -671,3 +760,4 @@ export class GameScene extends Phaser.Scene {
     this.player = undefined as unknown as Player;
   }
 }
+
