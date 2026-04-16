@@ -288,3 +288,101 @@ Vite встраивает `VITE_*` переменные **на этапе сбо
 - добавить реальный leaderboard screen
 
 Подробный серверный сценарий смотрите в [docs/DEPLOY.md](./docs/DEPLOY.md).
+## Audio System
+
+The game now uses a centralized audio layer built around [src/game/systems/AudioSystem.ts](./src/game/systems/AudioSystem.ts).
+
+- `BootScene` preloads every audio file from a single manifest in [src/game/utils/audioKeys.ts](./src/game/utils/audioKeys.ts)
+- scenes never call `this.sound.add()` or `this.sound.play()` directly for gameplay logic
+- one global `AudioSystem` instance survives scene changes and owns the active music track
+- music and SFX have separate volume controls and share a persisted `master mute`
+- settings are stored in `localStorage` under `spaceShooterAudioSettingsV1`
+
+### Audio Asset Layout
+
+Audio files live in `public/audio/` so Vite serves them directly:
+
+```text
+public/
+  audio/
+    music/
+      menu-theme.wav
+      gameplay-loop.wav
+      boss-loop.wav
+      game-over-sting.wav
+    sfx/
+      player-shoot.wav
+      enemy-hit.wav
+      enemy-destroy.wav
+      player-hurt.wav
+      powerup-pickup.wav
+      enemy-shoot.wav
+      boss-attack.wav
+      boss-hit.wav
+      boss-death.wav
+      ui-hover.wav
+      ui-click.wav
+      wave-start.wav
+      game-over.wav
+```
+
+The repository includes lightweight placeholder `.wav` files with those exact names. You can replace them later with real assets without changing code, as long as the filenames stay the same.
+
+### Music And SFX Flow
+
+- `MenuScene` requests `music-menu`
+- `GameScene` switches to `music-gameplay`
+- boss waves switch to `music-boss`
+- `GameOverScene` plays the one-shot `music-game-over` sting
+- menu buttons and pause controls use UI hover / click SFX through `AudioSystem`
+- combat events trigger typed SFX keys such as player fire, enemy hit, enemy destroy, player hurt, power-up pickup, boss attack, boss hit, boss death, wave start, and defeat
+
+`AudioSystem` keeps only one active music instance at a time, so restarting a scene does not stack multiple looping tracks.
+
+### Autoplay Restrictions
+
+Browsers can block audio playback until the first user gesture. The project handles that in a Phaser-friendly way:
+
+- menu pointer and keyboard input call `audioSystem.unlock()`
+- if music is requested while audio is still locked, `AudioSystem` stores the latest pending music key
+- once Phaser emits the `unlocked` event, the pending music track starts automatically
+- locked SFX calls safely no-op instead of crashing the game
+
+This means the game can boot silently, survive reloads, and begin music cleanly after the first interaction.
+
+### Audio Settings UI
+
+Audio controls are available in two places:
+
+- the menu audio strip at the bottom of `MenuScene`
+- the pause overlay inside `UISystem`
+
+Available settings:
+
+- `Mute: On / Off`
+- `Music` volume from `0.0` to `1.0` in `0.1` steps
+- `SFX` volume from `0.0` to `1.0` in `0.1` steps
+
+Default balance:
+
+- `masterMuted = false`
+- `musicVolume = 0.55`
+- `sfxVolume = 0.8`
+
+### Adding New Audio
+
+To add a new music track or SFX:
+
+1. Add the file under `public/audio/music/` or `public/audio/sfx/`
+2. Add a typed key in [src/game/types/audio.ts](./src/game/types/audio.ts)
+3. Export the key from [src/game/utils/audioKeys.ts](./src/game/utils/audioKeys.ts)
+4. Add the asset definition to `AUDIO_ASSETS`
+5. If it is an SFX, optionally tune anti-spam behavior in `SFX_PLAYBACK_RULES`
+6. Trigger it from a scene or system only through `AudioSystem`
+
+### Scene Ownership Rules
+
+- `BootScene` bootstraps the global audio system and preloads assets
+- `MenuScene`, `GameScene`, and `GameOverScene` only talk to `AudioSystem` through its public API
+- scene shutdown does not destroy the global audio service, which prevents duplicated music after restart
+- app-level teardown calls `AudioSystem.destroyGlobal()` from `main.ts`
