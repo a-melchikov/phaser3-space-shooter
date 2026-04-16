@@ -8,6 +8,7 @@ import { BackendLeaderboardClient } from "./game/services/BackendLeaderboardClie
 import { HttpRankedScoreSubmissionService } from "./game/services/HttpRankedScoreSubmissionService";
 import { PracticeScoreStore } from "./game/services/PracticeScoreStore";
 import { ResultsService } from "./game/services/ResultsService";
+import { AudioSystem } from "./game/systems/AudioSystem";
 
 const appRoot = document.getElementById("app");
 
@@ -34,5 +35,6 @@ const game = new Phaser.Game(createGameConfig(appRoot));
 
 window.addEventListener("beforeunload", () => {
   authService.destroy();
+  AudioSystem.destroyGlobal();
   game.destroy(true);
 });
