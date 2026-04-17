@@ -27,6 +27,15 @@ export class BootScene extends Phaser.Scene {
     this.registry.set("gameTitle", GAME_TITLE);
     this.registry.set("worldWidth", WORLD_WIDTH);
     this.registry.set("worldHeight", WORLD_HEIGHT);
+    if ("fonts" in document) {
+      void Promise.allSettled([
+        document.fonts.load("700 32px Orbitron"),
+        document.fonts.load("500 16px Orbitron")
+      ]).finally(() => {
+        this.scene.start(SCENE_KEYS.MENU);
+      });
+      return;
+    }
 
     this.scene.start(SCENE_KEYS.MENU);
   }
