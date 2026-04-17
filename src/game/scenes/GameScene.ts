@@ -18,7 +18,6 @@ import {
   CAMERA_SHAKE_LIGHT,
   CAMERA_SHAKE_STRONG,
   ENEMY_CONFIGS,
-  GAME_TITLE,
   POWER_UP_DROP_CHANCE,
   POWER_UP_LABELS,
   SCORE_VALUES,
@@ -32,7 +31,6 @@ import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../util
 export class GameScene extends Phaser.Scene {
   private background?: BackgroundSystem;
   private backgroundOverlay?: Phaser.GameObjects.Rectangle;
-  private footerText?: Phaser.GameObjects.Text;
 
   private player!: Player;
   private audioSystem!: AudioSystem;
@@ -92,6 +90,7 @@ export class GameScene extends Phaser.Scene {
     this.createInput();
 
     this.uiSystem = new UISystem(this, this.audioSystem, {
+      onPauseResume: () => this.togglePause(),
       onPauseExitToMenu: () => this.exitToMainMenu()
     });
     this.uiSystem.bindPlayer(this.player);
@@ -194,16 +193,6 @@ export class GameScene extends Phaser.Scene {
       0x05101f,
       0.14
     );
-    this.footerText = this.add
-      .text(getViewportWidth(this) - 16, getViewportHeight(this) - 18, `${GAME_TITLE} • Phaser 3`, {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "12px",
-        color: "#6f8ba3"
-      })
-      .setOrigin(1, 1)
-      .setScrollFactor(0)
-      .setDepth(40);
-
     this.layoutBackground();
   }
 
@@ -490,7 +479,6 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.uiSystem.showPauseOverlay(false);
     this.time.timeScale = 1;
-    this.tweens?.resumeAll();
     this.physics?.world?.resume();
   }
 
@@ -541,13 +529,11 @@ export class GameScene extends Phaser.Scene {
     if (this.isPaused) {
       this.physics?.world?.pause();
       this.time.timeScale = 0;
-      this.tweens?.pauseAll();
       return;
     }
 
     this.time.timeScale = 1;
     this.physics?.world?.resume();
-    this.tweens?.resumeAll();
   }
 
   private spawnImpact(x: number, y: number, tint: number): void {
@@ -589,7 +575,6 @@ export class GameScene extends Phaser.Scene {
 
     this.background?.resize();
     this.backgroundOverlay?.setPosition(getViewportCenterX(this), viewportHeight * 0.5).setSize(viewportWidth, viewportHeight);
-    this.footerText?.setPosition(viewportWidth - 16, viewportHeight - 18);
   }
 
   private refreshUiLayout(): void {
@@ -599,6 +584,7 @@ export class GameScene extends Phaser.Scene {
 
     this.uiSystem.destroy();
     this.uiSystem = new UISystem(this, this.audioSystem, {
+      onPauseResume: () => this.togglePause(),
       onPauseExitToMenu: () => this.exitToMainMenu()
     });
     this.uiSystem.bindPlayer(this.player);
@@ -732,7 +718,6 @@ export class GameScene extends Phaser.Scene {
     this.background?.destroy();
     this.background = undefined;
     this.backgroundOverlay = undefined;
-    this.footerText = undefined;
     this.physics?.world?.resume();
     this.time.timeScale = 1;
     this.tweens?.killAll();

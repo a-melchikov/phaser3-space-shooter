@@ -6,10 +6,16 @@ import { AudioSystem } from "../systems/AudioSystem";
 import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import type { CompletedRunResult, GameOverPayload, GameStartPayload, PracticeScoreEntry } from "../types/game";
 import { SCENE_KEYS } from "../types/scene";
-import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
-import { buildSessionPresentation, configureText, formatHighscoreDate } from "../utils/helpers";
-import { GAME_TITLE, UI_COLORS } from "../utils/constants";
+import { MUSIC_KEYS } from "../utils/audioKeys";
+import { buildSessionPresentation, formatHighscoreDate } from "../utils/helpers";
+import { GAME_TITLE } from "../utils/constants";
 import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
+import { UI_THEME, addUiText, colorToHex, fadeScaleIn, isCompactViewport } from "../ui/theme";
+import { UiButton, createAmbientOrb, createGlassPanel, type UiPanel } from "../ui/primitives";
+
+interface DestroyableComponent {
+  destroy(): void;
+}
 
 export class GameOverScene extends Phaser.Scene {
   private background?: BackgroundSystem;
@@ -29,9 +35,10 @@ export class GameOverScene extends Phaser.Scene {
   };
   private restartRequested = false;
   private readonly contentObjects: Phaser.GameObjects.GameObject[] = [];
+  private readonly components: DestroyableComponent[] = [];
   private rankedStatusText?: Phaser.GameObjects.Text;
   private rankedStatusMessage = "Проверяем сохранение результата...";
-  private rankedStatusColor = "#9abed8";
+  private rankedStatusColor = colorToHex(UI_THEME.colors.textSoft);
 
   public constructor() {
     super(SCENE_KEYS.GAME_OVER);
@@ -70,170 +77,192 @@ export class GameOverScene extends Phaser.Scene {
     this.background?.update(time);
 
     if (!this.restartRequested && this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
-      this.restartRequested = true;
-      this.audioSystem.unlock();
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-
-      const payload: GameStartPayload = {
-        source: "gameover",
-        session: buildSessionPresentation(getGameAppContext().authService.getSession())
-      };
-      this.scene.start(SCENE_KEYS.GAME, payload);
+      this.startNewRun();
       return;
     }
 
     if (this.menuKey && Phaser.Input.Keyboard.JustDown(this.menuKey)) {
-      this.audioSystem.unlock();
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
       this.scene.start(SCENE_KEYS.MENU);
     }
   }
 
   private createBackground(): void {
-    this.cameras.main.setBackgroundColor("#16060d");
+    this.cameras.main.setBackgroundColor("#0f0610");
     this.background = new BackgroundSystem(this, SPACE_BACKGROUND_PRESETS.gameOver);
 
-    this.backgroundOverlay = this.add.rectangle(
-      getViewportCenterX(this),
-      getViewportHeight(this) * 0.5,
-      getViewportWidth(this),
-      getViewportHeight(this),
-      0x10030a,
-      0.52
-    );
+    this.backgroundOverlay = this.add
+      .rectangle(
+        getViewportCenterX(this),
+        getViewportHeight(this) * 0.5,
+        getViewportWidth(this),
+        getViewportHeight(this),
+        0x09020a,
+        0.46
+      )
+      .setDepth(1);
 
     this.layoutBackground();
   }
 
   private createContent(scores: PracticeScoreEntry[], session: UserSession): void {
+    this.destroyContent();
+
     const viewportCenterX = getViewportCenterX(this);
     const viewportHeight = getViewportHeight(this);
+    const viewportWidth = getViewportWidth(this);
+    const compact = isCompactViewport(this);
+    const cardWidth = Math.min(viewportWidth - 44, compact ? 472 : 560);
+
+    this.trackObject(createAmbientOrb(this, viewportCenterX - 160, viewportHeight * 0.32, 260, 120, UI_THEME.colors.danger, 0.1, 2));
+    this.trackObject(createAmbientOrb(this, viewportCenterX + 180, viewportHeight * 0.56, 320, 140, UI_THEME.colors.violet, 0.08, 2));
 
     const title = this.trackObject(
-      this.add
-        .text(viewportCenterX, 72, "ПОРАЖЕНИЕ", {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "48px",
-          color: "#ffdce2",
-          fontStyle: "bold"
-        })
+      addUiText(this, viewportCenterX, compact ? 68 : 82, "Поражение", "heroTitle", {
+        fontSize: compact ? "36px" : "46px"
+      })
         .setOrigin(0.5)
+        .setDepth(UI_THEME.depth.menu + 4)
     );
+    title.setShadow(0, 0, colorToHex(UI_THEME.colors.danger), 16, false, true);
+    fadeScaleIn(this, title, { scaleFrom: 0.97, yOffset: 8 });
 
-    title.setShadow(0, 0, "#ff6b7a", 12, false, true);
+    const subtitle = this.trackObject(
+      addUiText(this, viewportCenterX, compact ? 106 : 122, GAME_TITLE, "bodySoft", {
+        color: colorToHex(UI_THEME.colors.textSoft)
+      })
+        .setOrigin(0.5)
+        .setDepth(UI_THEME.depth.menu + 4)
+    );
+    fadeScaleIn(this, subtitle, { delay: 40, scaleFrom: 0.98, yOffset: 6 });
+
+    const summaryPanel = this.trackComponent(
+      createGlassPanel(this, {
+        x: viewportCenterX,
+        y: viewportHeight * (compact ? 0.39 : 0.37),
+        width: cardWidth,
+        height: 246,
+        depth: UI_THEME.depth.menu + 2,
+        fillColor: UI_THEME.colors.panelStrong,
+        fillAlpha: 0.88,
+        glowColor: UI_THEME.colors.danger,
+        borderColor: UI_THEME.colors.danger
+      })
+    );
+    this.populateSummaryPanel(summaryPanel, cardWidth, session);
+    fadeScaleIn(this, summaryPanel.root, { delay: 80, scaleFrom: 0.97, yOffset: 12 });
+
+    const leaderboardPanel = this.trackComponent(
+      createGlassPanel(this, {
+        x: viewportCenterX,
+        y: viewportHeight * (compact ? 0.71 : 0.68),
+        width: cardWidth,
+        height: compact ? 198 : 210,
+        depth: UI_THEME.depth.menu + 2,
+        fillColor: UI_THEME.colors.panel,
+        fillAlpha: 0.8,
+        glowColor: UI_THEME.colors.violet,
+        borderColor: UI_THEME.colors.lineSoft
+      })
+    );
+    this.populateLeaderboardPanel(leaderboardPanel, cardWidth, scores);
+    fadeScaleIn(this, leaderboardPanel.root, { delay: 120, scaleFrom: 0.98, yOffset: 10 });
+
+    const restartButton = this.trackComponent(
+      new UiButton(this, {
+        x: viewportCenterX - 106,
+        y: viewportHeight - (compact ? 54 : 48),
+        width: 184,
+        height: 44,
+        label: "Играть снова",
+        variant: "primary",
+        depth: UI_THEME.depth.menu + 5,
+        audioSystem: this.audioSystem,
+        onClick: () => this.startNewRun()
+      })
+    );
+    const menuButton = this.trackComponent(
+      new UiButton(this, {
+        x: viewportCenterX + 106,
+        y: viewportHeight - (compact ? 54 : 48),
+        width: 184,
+        height: 40,
+        label: "Главное меню",
+        variant: "ghost",
+        depth: UI_THEME.depth.menu + 5,
+        audioSystem: this.audioSystem,
+        onClick: () => this.scene.start(SCENE_KEYS.MENU)
+      })
+    );
+    fadeScaleIn(this, restartButton.root, { delay: 150, scaleFrom: 0.99, yOffset: 6 });
+    fadeScaleIn(this, menuButton.root, { delay: 170, scaleFrom: 0.99, yOffset: 6 });
 
     this.trackObject(
-      this.add
-        .text(viewportCenterX, 112, GAME_TITLE, {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "18px",
-          color: "#f1b9c3"
-        })
-        .setOrigin(0.5)
+      addUiText(this, viewportCenterX, viewportHeight - 14, "R — заново   •   Esc — меню", "meta", {
+        color: colorToHex(UI_THEME.colors.textMuted)
+      })
+        .setOrigin(0.5, 1)
+        .setDepth(UI_THEME.depth.menu + 3)
     );
+  }
 
-    this.trackObject(
-      this.add
-        .rectangle(viewportCenterX, 210, 520, 138, UI_COLORS.panel, 0.9)
-        .setStrokeStyle(2, UI_COLORS.danger, 0.28)
-    );
-
-    this.trackObject(
-      this.add
-        .text(viewportCenterX, 170, `Итоговый счёт: ${this.payload.score}`, {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "28px",
-          color: "#ffffff",
-          fontStyle: "bold"
-        })
-        .setOrigin(0.5)
-    );
-
+  private populateSummaryPanel(panel: UiPanel, panelWidth: number, session: UserSession): void {
     const sessionLabel = session.isGuest ? "Гость" : `${session.displayName} • Google`;
-    this.trackObject(
-      this.add
-        .text(viewportCenterX, 208, `Волна: ${this.payload.wave} • Профиль: ${sessionLabel}`, {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "20px",
-          color: "#f5c0cb"
-        })
-        .setOrigin(0.5)
-    );
+    panel.content.add(addUiText(this, 0, 0, "Итоги сессии", "label").setOrigin(0, 0));
+    panel.content.add(addUiText(this, 0, 26, `${this.payload.score} очков`, "heroTitle", {
+      fontSize: "34px",
+      color: colorToHex(UI_THEME.colors.text)
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, 0, 76, `Волна ${this.payload.wave} • ${sessionLabel}`, "bodySoft", {
+      color: colorToHex(UI_THEME.colors.textSoft)
+    }).setOrigin(0, 0));
 
     const modeSummary = session.isGuest
-      ? "Результат сохранён на этом устройстве."
-      : "Результат сохранён и отправлен в онлайн-таблицу, если она доступна.";
+      ? "Результат сохранён локально на этом устройстве."
+      : "Результат сохранён локально и отправляется в ranked-поток, если backend доступен.";
 
-    this.trackObject(
-      this.add
-        .text(viewportCenterX, 240, modeSummary, {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "15px",
-          color: session.isGuest ? "#ffd76c" : "#79f7c1",
-          wordWrap: { width: 460 },
-          align: "center"
-        })
-        .setOrigin(0.5)
-    );
+    panel.content.add(addUiText(this, 0, 110, modeSummary, "bodySoft", {
+      wordWrap: { width: panelWidth - 48 },
+      color: colorToHex(session.isGuest ? UI_THEME.colors.warning : UI_THEME.colors.success),
+      lineSpacing: 5
+    }).setOrigin(0, 0));
 
     this.rankedStatusText = this.trackObject(
-      this.add
-        .text(viewportCenterX, 272, this.rankedStatusMessage, {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "14px",
-          color: this.rankedStatusColor,
-          wordWrap: { width: 460 },
-          align: "center"
-        })
-        .setOrigin(0.5)
+      addUiText(this, panel.root.x - panelWidth * 0.5 + 24, panel.root.y + 78, this.rankedStatusMessage, "meta", {
+        color: this.rankedStatusColor,
+        wordWrap: { width: panelWidth - 48 }
+      })
+        .setOrigin(0, 0)
+        .setDepth(UI_THEME.depth.menu + 4)
     ) as Phaser.GameObjects.Text;
+  }
 
-    this.trackObject(
-      this.add
-        .rectangle(viewportCenterX, 414, 620, 228, UI_COLORS.panel, 0.9)
-        .setStrokeStyle(2, UI_COLORS.cyan, 0.22)
-    );
+  private populateLeaderboardPanel(panel: UiPanel, panelWidth: number, scores: PracticeScoreEntry[]): void {
+    const contentWidth = panelWidth - 48;
+    panel.content.add(addUiText(this, 0, 0, "Лучшие локальные результаты", "sectionTitle", {
+      fontSize: "22px"
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, 0, 30, "Последние лучшие матчи этой установки", "meta").setOrigin(0, 0));
 
-    this.trackObject(
-      this.add
-        .text(viewportCenterX, 322, "Лучшие результаты", {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "26px",
-          color: "#ffd76c",
-          fontStyle: "bold"
-        })
-        .setOrigin(0.5)
-    );
+    scores.slice(0, 4).forEach((entry, index) => {
+      const rowY = 72 + index * 32;
+      const row = this.add.container(0, rowY);
+      const divider = this.add.graphics();
+      divider.lineStyle(1, UI_THEME.colors.line, index === 0 ? 0.16 : 0.08);
+      divider.lineBetween(0, 26, contentWidth, 26);
 
-    scores.forEach((entry, index) => {
-      const modeLabel = entry.rankedEligible ? "онлайн" : "локально";
-      this.trackObject(
-        this.add
-          .text(
-            viewportCenterX,
-            360 + index * 30,
-            `#${index + 1} — ${entry.score} очков • волна ${entry.wave} • ${entry.playerLabel} • ${modeLabel} • ${formatHighscoreDate(entry.date)}`,
-            {
-              fontFamily: "Segoe UI, sans-serif",
-              fontSize: "17px",
-              color: index === 0 ? "#ffffff" : "#c9d8e5",
-              wordWrap: { width: 560 },
-              align: "center"
-            }
-          )
-          .setOrigin(0.5)
-      );
+      const rank = addUiText(this, 0, 0, `#${index + 1}`, "label", {
+        color: colorToHex(index === 0 ? UI_THEME.colors.warning : UI_THEME.colors.cyan)
+      }).setOrigin(0, 0);
+      const score = addUiText(this, 40, 0, `${entry.score} • волна ${entry.wave}`, "body", {
+        fontSize: "15px"
+      }).setOrigin(0, 0);
+      const meta = addUiText(this, contentWidth, 0, `${this.truncateLabel(entry.playerLabel, 16)} • ${formatHighscoreDate(entry.date)}`, "meta", {
+        align: "right"
+      }).setOrigin(1, 0);
+
+      row.add([divider, rank, score, meta]);
+      panel.content.add(row);
     });
-
-    this.trackObject(
-      this.add
-        .text(viewportCenterX, viewportHeight - 28, "R — заново • Esc — в меню", {
-          fontFamily: "Segoe UI, sans-serif",
-          fontSize: "18px",
-          color: "#9abed8"
-        })
-        .setOrigin(0.5, 1)
-    );
   }
 
   private async updateRankedStatus(result: CompletedRunResult, session: UserSession): Promise<void> {
@@ -245,12 +274,12 @@ export class GameOverScene extends Phaser.Scene {
 
     const color =
       outcome.status === "failed"
-        ? "#ff9eaa"
+        ? colorToHex(UI_THEME.colors.danger)
         : outcome.status === "unavailable"
-          ? "#ffd76c"
+          ? colorToHex(UI_THEME.colors.warning)
           : outcome.status === "skipped"
-            ? "#9abed8"
-            : "#79f7c1";
+            ? colorToHex(UI_THEME.colors.textSoft)
+            : colorToHex(UI_THEME.colors.success);
 
     this.rankedStatusColor = color;
     this.rankedStatusMessage = outcome.message;
@@ -258,17 +287,44 @@ export class GameOverScene extends Phaser.Scene {
     this.rankedStatusText.setText(outcome.message);
   }
 
-  private trackObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
-    this.contentObjects.push(object);
-
-    if (object instanceof Phaser.GameObjects.Text) {
-      configureText(object);
+  private startNewRun(): void {
+    if (this.restartRequested) {
+      return;
     }
 
+    this.restartRequested = true;
+    this.audioSystem.unlock();
+
+    const payload: GameStartPayload = {
+      source: "gameover",
+      session: buildSessionPresentation(getGameAppContext().authService.getSession())
+    };
+    this.scene.start(SCENE_KEYS.GAME, payload);
+  }
+
+  private truncateLabel(value: string, maxLength: number): string {
+    if (value.length <= maxLength) {
+      return value;
+    }
+
+    return `${value.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+  }
+
+  private trackObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.contentObjects.push(object);
     return object;
   }
 
+  private trackComponent<T extends DestroyableComponent>(component: T): T {
+    this.components.push(component);
+    return component;
+  }
+
   private destroyContent(): void {
+    while (this.components.length > 0) {
+      this.components.pop()?.destroy();
+    }
+
     while (this.contentObjects.length > 0) {
       this.contentObjects.pop()?.destroy();
     }
@@ -284,7 +340,6 @@ export class GameOverScene extends Phaser.Scene {
 
   private handleResize(): void {
     this.layoutBackground();
-    this.destroyContent();
     this.createContent(getGameAppContext().resultsService.getPracticeScores(), getGameAppContext().authService.getSession());
   }
 
@@ -308,6 +363,6 @@ export class GameOverScene extends Phaser.Scene {
     this.restartRequested = false;
     this.rankedStatusText = undefined;
     this.rankedStatusMessage = "Проверяем сохранение результата...";
-    this.rankedStatusColor = "#9abed8";
+    this.rankedStatusColor = colorToHex(UI_THEME.colors.textSoft);
   }
 }

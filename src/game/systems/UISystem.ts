@@ -2,47 +2,62 @@ import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
 import type { ActivePowerUpState, SessionPresentation } from "../types/game";
-import { SFX_KEYS } from "../utils/audioKeys";
-import { UI_COLORS } from "../utils/constants";
-import { clamp, configureText } from "../utils/helpers";
 import { getViewportCenterX, getViewportCenterY, getViewportHeight, getViewportWidth } from "../utils/viewport";
 import { AudioSystem } from "./AudioSystem";
-
-interface PauseButton {
-  background: Phaser.GameObjects.Rectangle;
-  label: Phaser.GameObjects.Text;
-}
+import { AudioSettingsPanel } from "../ui/audioPanel";
+import { UI_THEME, addUiText, colorToHex, fadeScaleIn } from "../ui/theme";
+import { UiButton, UiMeter, createAmbientOrb, createChip, createGlassPanel, createScreenOverlay, type UiPanel } from "../ui/primitives";
 
 interface UISystemOptions {
+  onPauseResume?: () => void;
   onPauseExitToMenu?: () => void;
+}
+
+interface DestroyableComponent {
+  destroy(): void;
 }
 
 export class UISystem {
   private player?: Player;
-  private readonly hudObjects: Phaser.GameObjects.GameObject[] = [];
-  private readonly pauseButtons: PauseButton[] = [];
-  private readonly healthFill: Phaser.GameObjects.Rectangle;
-  private readonly healthText: Phaser.GameObjects.Text;
-  private readonly livesText: Phaser.GameObjects.Text;
-  private readonly scoreText: Phaser.GameObjects.Text;
-  private readonly waveText: Phaser.GameObjects.Text;
-  private readonly powerUpText: Phaser.GameObjects.Text;
-  private readonly sessionText: Phaser.GameObjects.Text;
-  private readonly rankedText: Phaser.GameObjects.Text;
-  private readonly bossBarBg: Phaser.GameObjects.Rectangle;
+  private readonly objects: Phaser.GameObjects.GameObject[] = [];
+  private readonly components: DestroyableComponent[] = [];
+  private readonly leftPanel: UiPanel;
+  private readonly rightPanel: UiPanel;
+  private readonly bossPanel: UiPanel;
+  private readonly bannerPanel: UiPanel;
+  private readonly pausePanel: UiPanel;
+  private readonly healthMeter: UiMeter;
+  private readonly livesValueText: Phaser.GameObjects.Text;
+  private readonly scoreValueText: Phaser.GameObjects.Text;
+  private readonly waveValueText: Phaser.GameObjects.Text;
+  private readonly statusValueText: Phaser.GameObjects.Text;
+  private readonly profileValueText: Phaser.GameObjects.Text;
   private readonly bossBarFill: Phaser.GameObjects.Rectangle;
-  private readonly bossBarText: Phaser.GameObjects.Text;
-  private readonly pauseOverlay: Phaser.GameObjects.Rectangle;
-  private readonly pausePanel: Phaser.GameObjects.Rectangle;
-  private readonly pauseText: Phaser.GameObjects.Text;
-  private readonly pauseHintText: Phaser.GameObjects.Text;
-  private readonly pauseMuteValueText: Phaser.GameObjects.Text;
-  private readonly pauseMusicValueText: Phaser.GameObjects.Text;
-  private readonly pauseSfxValueText: Phaser.GameObjects.Text;
+  private readonly bossValueText: Phaser.GameObjects.Text;
   private readonly bannerText: Phaser.GameObjects.Text;
+  private readonly pauseOverlay: Phaser.GameObjects.Rectangle;
+  private readonly pauseGlowPrimary: Phaser.GameObjects.Ellipse;
+  private readonly pauseGlowSecondary: Phaser.GameObjects.Ellipse;
+  private readonly pauseHintText: Phaser.GameObjects.Text;
+  private readonly pauseSettingsPanel: AudioSettingsPanel;
+  private readonly pauseContinueButton: UiButton;
+  private readonly pauseSettingsButton: UiButton;
+  private readonly pauseExitButton: UiButton;
+  private readonly powerUpLabelText: Phaser.GameObjects.Text;
+  private readonly powerUpContainer: Phaser.GameObjects.Container;
+  private readonly powerUpChips: Phaser.GameObjects.GameObject[] = [];
   private bannerTween?: Phaser.Tweens.Tween;
   private score = 0;
   private wave = 1;
+  private powerUpSignature = "";
+  private sessionStatus: SessionPresentation = {
+    mode: "guest",
+    displayName: "Гость",
+    rankedEligible: false,
+    isGuest: true
+  };
+  private pauseVisible = false;
+  private pauseSettingsVisible = false;
 
   public constructor(
     private readonly scene: Phaser.Scene,
@@ -54,333 +69,242 @@ export class UISystem {
     const viewportCenterX = getViewportCenterX(scene);
     const viewportCenterY = getViewportCenterY(scene);
 
-    const panel = scene.add
-      .rectangle(208, 58, 404, 90, UI_COLORS.panel, 0.86)
-      .setStrokeStyle(2, UI_COLORS.cyan, 0.14)
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(50);
-
-    const healthLabel = scene.add
-      .text(18, 18, "Здоровье", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "14px",
-        color: "#9abed8"
+    this.leftPanel = this.trackComponent(
+      createGlassPanel(scene, {
+        x: 138,
+        y: 76,
+        width: 240,
+        height: 106,
+        depth: UI_THEME.depth.hud,
+        fillColor: UI_THEME.colors.panelStrong,
+        fillAlpha: 0.76
       })
-      .setScrollFactor(0)
-      .setDepth(51);
-
-    const healthBg = scene.add
-      .rectangle(18, 42, 180, 14, 0x16253d, 1)
-      .setOrigin(0, 0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
-
-    this.healthFill = scene.add
-      .rectangle(18, 42, 180, 14, UI_COLORS.success, 1)
-      .setOrigin(0, 0.5)
-      .setScrollFactor(0)
-      .setDepth(52);
-
-    this.healthText = scene.add
-      .text(18, 54, "100 / 100", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "14px",
-        color: "#eaf7ff"
+    );
+    this.healthMeter = this.trackComponent(
+      new UiMeter(scene, {
+        x: 0,
+        y: 0,
+        width: 192,
+        label: "Здоровье",
+        valueText: "100 / 100",
+        color: UI_THEME.colors.success,
+        depth: UI_THEME.depth.hud + 2
       })
-      .setScrollFactor(0)
-      .setDepth(52);
+    );
+    this.leftPanel.content.add(this.healthMeter.root);
 
-    this.livesText = scene.add
-      .text(248, 18, "Жизни: 3", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#eaf7ff",
-        fontStyle: "bold"
+    this.leftPanel.content.add(
+      addUiText(scene, 0, 56, "Жизни", "meta", {
+        color: colorToHex(UI_THEME.colors.textSoft)
+      }).setOrigin(0, 0)
+    );
+    this.livesValueText = addUiText(scene, 0, 74, "3", "metric", {
+      fontSize: "20px"
+    }).setOrigin(0, 0);
+    this.leftPanel.content.add(this.livesValueText);
+
+    this.leftPanel.content.add(
+      addUiText(scene, 108, 56, "Счёт", "meta", {
+        color: colorToHex(UI_THEME.colors.textSoft)
+      }).setOrigin(0, 0)
+    );
+    this.scoreValueText = addUiText(scene, 108, 74, "0", "metric", {
+      fontSize: "20px",
+      color: colorToHex(UI_THEME.colors.warning)
+    }).setOrigin(0, 0);
+    this.leftPanel.content.add(this.scoreValueText);
+
+    this.rightPanel = this.trackComponent(
+      createGlassPanel(scene, {
+        x: viewportWidth - 138,
+        y: 88,
+        width: 244,
+        height: 138,
+        depth: UI_THEME.depth.hud,
+        fillColor: UI_THEME.colors.panelStrong,
+        fillAlpha: 0.76,
+        glowColor: UI_THEME.colors.violet,
+        borderColor: UI_THEME.colors.lineSoft
       })
-      .setScrollFactor(0)
-      .setDepth(52);
+    );
+    this.rightPanel.content.add(addUiText(scene, 0, 0, "Текущая волна", "label").setOrigin(0, 0));
+    this.waveValueText = addUiText(scene, 0, 22, "1", "metric", {
+      fontSize: "28px"
+    }).setOrigin(0, 0);
+    this.rightPanel.content.add(this.waveValueText);
 
-    this.scoreText = scene.add
-      .text(248, 44, "Счёт: 0", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#ffd76c",
-        fontStyle: "bold"
+    this.rightPanel.content.add(addUiText(scene, 0, 62, "Статус", "meta", {
+      color: colorToHex(UI_THEME.colors.textSoft)
+    }).setOrigin(0, 0));
+    this.statusValueText = addUiText(scene, 160, 62, "local only", "bodySoft", {
+      color: colorToHex(UI_THEME.colors.success),
+      align: "right"
+    }).setOrigin(1, 0);
+    this.rightPanel.content.add(this.statusValueText);
+
+    this.rightPanel.content.add(addUiText(scene, 0, 86, "Профиль", "meta", {
+      color: colorToHex(UI_THEME.colors.textSoft)
+    }).setOrigin(0, 0));
+    this.profileValueText = addUiText(scene, 160, 86, "Гость", "bodySoft", {
+      align: "right"
+    }).setOrigin(1, 0);
+    this.rightPanel.content.add(this.profileValueText);
+
+    this.powerUpLabelText = this.trackObject(
+      addUiText(scene, viewportWidth - 18, 148, "Бонусы", "meta", {
+        color: colorToHex(UI_THEME.colors.textMuted)
       })
-      .setScrollFactor(0)
-      .setDepth(52);
-
-    this.waveText = scene.add
-      .text(viewportWidth - 18, 18, "Волна: 1", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#6ef2ff",
-        fontStyle: "bold"
-      })
-      .setOrigin(1, 0)
-      .setScrollFactor(0)
-      .setDepth(52);
-
-    this.powerUpText = scene.add
-      .text(viewportWidth - 18, 44, "Бонусы: нет", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "14px",
-        color: "#9abed8"
-      })
-      .setOrigin(1, 0)
-      .setScrollFactor(0)
-      .setDepth(52);
-
-    this.sessionText = scene.add
-      .text(viewportWidth - 18, 66, "Профиль: гость", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "13px",
-        color: "#8bcfff"
-      })
-      .setOrigin(1, 0)
-      .setScrollFactor(0)
-      .setDepth(52);
-
-    this.rankedText = scene.add
-      .text(viewportWidth - 18, 84, "Результаты: только локально", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "13px",
-        color: "#9abed8"
-      })
-      .setOrigin(1, 0)
-      .setScrollFactor(0)
-      .setDepth(52);
-
-    this.bossBarBg = scene.add
-      .rectangle(viewportCenterX, 104, 340, 16, 0x16253d, 1)
-      .setScrollFactor(0)
-      .setDepth(52)
-      .setVisible(false);
-
-    this.bossBarFill = scene.add
-      .rectangle(viewportCenterX - 170, 104, 340, 16, UI_COLORS.danger, 1)
-      .setOrigin(0, 0.5)
-      .setScrollFactor(0)
-      .setDepth(53)
-      .setVisible(false);
-
-    this.bossBarText = scene.add
-      .text(viewportCenterX, 80, "", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "14px",
-        color: "#ffdce2"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(53)
-      .setVisible(false);
-
-    this.pauseOverlay = scene.add
-      .rectangle(viewportCenterX, viewportCenterY, viewportWidth, viewportHeight, 0x000000, 0.45)
-      .setScrollFactor(0)
-      .setDepth(120)
-      .setVisible(false);
-
-    this.pausePanel = scene.add
-      .rectangle(viewportCenterX, viewportCenterY, 420, 292, UI_COLORS.panel, 0.94)
-      .setStrokeStyle(2, UI_COLORS.cyan, 0.28)
-      .setScrollFactor(0)
-      .setDepth(121)
-      .setVisible(false);
-
-    this.pauseText = scene.add
-      .text(viewportCenterX, viewportCenterY - 86, "Пауза", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "48px",
-        color: "#eaf7ff",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    this.pauseHintText = scene.add
-      .text(viewportCenterX, viewportCenterY - 50, "Esc или P — продолжить", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "16px",
-        color: "#9abed8"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    const pauseAudioHeader = scene.add
-      .text(viewportCenterX, viewportCenterY - 14, "Звук", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "20px",
-        color: "#ffd76c",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    const muteLabel = scene.add
-      .text(viewportCenterX - 128, viewportCenterY + 24, "Общий звук", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#eaf7ff"
-      })
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    const musicLabel = scene.add
-      .text(viewportCenterX - 128, viewportCenterY + 64, "Музыка", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#eaf7ff"
-      })
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    const sfxLabel = scene.add
-      .text(viewportCenterX - 128, viewportCenterY + 104, "Эффекты", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#eaf7ff"
-      })
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    this.pauseMuteValueText = scene.add
-      .text(viewportCenterX + 18, viewportCenterY + 24, "Вкл", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#9abed8",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    this.pauseMusicValueText = scene.add
-      .text(viewportCenterX + 18, viewportCenterY + 64, "55%", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#9abed8",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    this.pauseSfxValueText = scene.add
-      .text(viewportCenterX + 18, viewportCenterY + 104, "80%", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "18px",
-        color: "#9abed8",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(122)
-      .setVisible(false);
-
-    this.bannerText = scene.add
-      .text(viewportCenterX, viewportHeight * 0.42, "", {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "34px",
-        color: "#eaf7ff",
-        fontStyle: "bold",
-        align: "center"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(110)
-      .setVisible(false);
-
-    this.hudObjects.push(
-      panel,
-      healthLabel,
-      healthBg,
-      this.healthFill,
-      this.healthText,
-      this.livesText,
-      this.scoreText,
-      this.waveText,
-      this.powerUpText,
-      this.sessionText,
-      this.rankedText,
-      this.bossBarBg,
-      this.bossBarFill,
-      this.bossBarText,
-      this.pauseOverlay,
-      this.pausePanel,
-      this.pauseText,
-      this.pauseHintText,
-      pauseAudioHeader,
-      muteLabel,
-      musicLabel,
-      sfxLabel,
-      this.pauseMuteValueText,
-      this.pauseMusicValueText,
-      this.pauseSfxValueText,
-      this.bannerText
+        .setOrigin(1, 0)
+        .setDepth(UI_THEME.depth.hud + 1)
+    );
+    this.powerUpContainer = this.trackObject(
+      scene.add.container(viewportWidth - 18, 172).setDepth(UI_THEME.depth.hud + 2)
     );
 
-    this.createPauseButton(viewportCenterX + 130, viewportCenterY + 39, 118, 30, "Переключить", () => {
-      const settings = this.audioSystem.getSettings();
-      this.audioSystem.unlock();
-      this.audioSystem.setMasterMuted(!settings.masterMuted);
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-      this.refreshAudioSettings();
-    });
-    this.createPauseButton(viewportCenterX - 16, viewportCenterY + 79, 34, 30, "-", () => {
-      const settings = this.audioSystem.getSettings();
-      this.audioSystem.unlock();
-      this.audioSystem.setMusicVolume(clamp(settings.musicVolume - 0.1, 0, 1));
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-      this.refreshAudioSettings();
-    });
-    this.createPauseButton(viewportCenterX + 54, viewportCenterY + 79, 34, 30, "+", () => {
-      const settings = this.audioSystem.getSettings();
-      this.audioSystem.unlock();
-      this.audioSystem.setMusicVolume(clamp(settings.musicVolume + 0.1, 0, 1));
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-      this.refreshAudioSettings();
-    });
-    this.createPauseButton(viewportCenterX - 16, viewportCenterY + 119, 34, 30, "-", () => {
-      const settings = this.audioSystem.getSettings();
-      this.audioSystem.unlock();
-      this.audioSystem.setSfxVolume(clamp(settings.sfxVolume - 0.1, 0, 1));
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-      this.refreshAudioSettings();
-    });
-    this.createPauseButton(viewportCenterX + 54, viewportCenterY + 119, 34, 30, "+", () => {
-      const settings = this.audioSystem.getSettings();
-      this.audioSystem.unlock();
-      this.audioSystem.setSfxVolume(clamp(settings.sfxVolume + 0.1, 0, 1));
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-      this.refreshAudioSettings();
-    });
-    this.createPauseButton(viewportCenterX, viewportCenterY + 168, 186, 36, "Главное меню", () => {
-      this.audioSystem.unlock();
-      this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-      this.options.onPauseExitToMenu?.();
-    });
+    this.bossPanel = this.trackComponent(
+      createGlassPanel(scene, {
+        x: viewportCenterX,
+        y: 42,
+        width: Math.min(380, viewportWidth - 80),
+        height: 52,
+        depth: UI_THEME.depth.hud + 2,
+        fillColor: UI_THEME.colors.panel,
+        fillAlpha: 0.72,
+        glowColor: UI_THEME.colors.danger,
+        borderColor: UI_THEME.colors.danger
+      })
+    );
+    const bossTrack = scene.add.graphics();
+    bossTrack.fillStyle(UI_THEME.colors.surface, 0.92);
+    bossTrack.fillRoundedRect(0, 18, Math.min(312, viewportWidth - 148), 10, 10);
+    bossTrack.lineStyle(1, UI_THEME.colors.danger, 0.16);
+    bossTrack.strokeRoundedRect(0, 18, Math.min(312, viewportWidth - 148), 10, 10);
+    this.bossPanel.content.add(bossTrack);
 
-    this.hudObjects.forEach((object) => {
-      if (object instanceof Phaser.GameObjects.Text) {
-        configureText(object);
-      }
-    });
+    this.bossValueText = addUiText(scene, 0, 0, "", "meta", {
+      color: colorToHex(UI_THEME.colors.danger)
+    }).setOrigin(0, 0);
+    this.bossPanel.content.add(this.bossValueText);
 
-    this.refreshAudioSettings();
-    this.setPauseControlsInteractive(false);
+    this.bossBarFill = scene.add
+      .rectangle(0, 23, Math.min(312, viewportWidth - 148), 6, UI_THEME.colors.danger, 1)
+      .setOrigin(0, 0.5);
+    this.bossPanel.content.add(this.bossBarFill);
+    this.bossPanel.root.setVisible(false);
+
+    this.bannerPanel = this.trackComponent(
+      createGlassPanel(scene, {
+        x: viewportCenterX,
+        y: viewportHeight * 0.24,
+        width: Math.min(320, viewportWidth - 80),
+        height: 62,
+        depth: UI_THEME.depth.banner,
+        fillColor: UI_THEME.colors.panelStrong,
+        fillAlpha: 0.9,
+        glowColor: UI_THEME.colors.cyan
+      })
+    );
+    this.bannerText = addUiText(scene, 0, 7, "", "sectionTitle", {
+      fontSize: "20px",
+      align: "center",
+      color: colorToHex(UI_THEME.colors.text)
+    }).setOrigin(0, 0);
+    this.bannerPanel.content.add(this.bannerText);
+    this.bannerPanel.root.setVisible(false);
+
+    this.pauseOverlay = this.trackObject(createScreenOverlay(scene, UI_THEME.colors.shadow, 0.76, UI_THEME.depth.overlay));
+    this.pauseOverlay.setVisible(false);
+
+    this.pauseGlowPrimary = this.trackObject(
+      createAmbientOrb(scene, viewportCenterX, viewportCenterY, 360, 220, UI_THEME.colors.violet, 0.12, UI_THEME.depth.overlay + 1)
+    );
+    this.pauseGlowPrimary.setVisible(false);
+    this.pauseGlowSecondary = this.trackObject(
+      createAmbientOrb(scene, viewportCenterX, viewportCenterY + 34, 460, 260, UI_THEME.colors.cyan, 0.08, UI_THEME.depth.overlay + 1)
+    );
+    this.pauseGlowSecondary.setVisible(false);
+
+    this.pausePanel = this.trackComponent(
+      createGlassPanel(scene, {
+        x: viewportCenterX,
+        y: viewportCenterY - 12,
+        width: Math.min(420, viewportWidth - 48),
+        height: 248,
+        depth: UI_THEME.depth.overlayContent,
+        fillColor: UI_THEME.colors.panelStrong,
+        fillAlpha: 0.94,
+        glowColor: UI_THEME.colors.violet,
+        borderColor: UI_THEME.colors.lineSoft
+      })
+    );
+    this.pausePanel.root.setVisible(false);
+    this.pausePanel.content.add(addUiText(scene, 0, 0, "Пауза", "heroTitle", {
+      fontSize: "38px"
+    }).setOrigin(0, 0));
+    this.pauseHintText = addUiText(scene, 0, 44, "Esc или P — продолжить матч", "meta", {
+      color: colorToHex(UI_THEME.colors.textSoft)
+    }).setOrigin(0, 0);
+    this.pausePanel.content.add(this.pauseHintText);
+
+    this.pauseContinueButton = this.trackComponent(
+      new UiButton(scene, {
+        x: 0,
+        y: 108,
+        width: Math.min(300, viewportWidth - 120),
+        height: 46,
+        label: "Продолжить",
+        variant: "primary",
+        depth: UI_THEME.depth.overlayContent + 2,
+        audioSystem,
+        onClick: () => this.options.onPauseResume?.()
+      })
+    );
+    this.pauseContinueButton.setVisible(false);
+    this.pausePanel.root.add(this.pauseContinueButton.root);
+
+    this.pauseSettingsButton = this.trackComponent(
+      new UiButton(scene, {
+        x: 0,
+        y: 162,
+        width: Math.min(300, viewportWidth - 120),
+        height: 40,
+        label: "Настройки",
+        variant: "secondary",
+        depth: UI_THEME.depth.overlayContent + 2,
+        audioSystem,
+        onClick: () => this.togglePauseSettings()
+      })
+    );
+    this.pauseSettingsButton.setVisible(false);
+    this.pausePanel.root.add(this.pauseSettingsButton.root);
+
+    this.pauseExitButton = this.trackComponent(
+      new UiButton(scene, {
+        x: 0,
+        y: 210,
+        width: Math.min(300, viewportWidth - 120),
+        height: 38,
+        label: "Выйти в меню",
+        variant: "ghost",
+        depth: UI_THEME.depth.overlayContent + 2,
+        audioSystem,
+        onClick: () => this.options.onPauseExitToMenu?.()
+      })
+    );
+    this.pauseExitButton.setVisible(false);
+    this.pausePanel.root.add(this.pauseExitButton.root);
+
+    this.pauseSettingsPanel = this.trackComponent(
+      new AudioSettingsPanel(scene, audioSystem, {
+        x: viewportCenterX,
+        y: viewportCenterY + 184,
+        width: Math.min(360, viewportWidth - 56),
+        title: "Параметры звука",
+        subtitle: "Изменения применяются сразу.",
+        depth: UI_THEME.depth.overlayContent + 1
+      })
+    );
+    this.pauseSettingsPanel.setVisible(false);
   }
 
   public bindPlayer(player: Player): void {
@@ -388,9 +312,10 @@ export class UISystem {
   }
 
   public setSessionStatus(session: SessionPresentation): void {
-    this.sessionText.setText(session.isGuest ? "Профиль: гость" : `Профиль: ${session.displayName}`);
-    this.rankedText.setText(session.rankedEligible ? "Результаты: локально и онлайн" : "Результаты: только локально");
-    this.rankedText.setColor(session.rankedEligible ? "#79f7c1" : "#9abed8");
+    this.sessionStatus = session;
+    this.profileValueText.setText(session.isGuest ? "Гость" : session.displayName);
+    this.statusValueText.setText(session.rankedEligible ? "online ready" : "local only");
+    this.statusValueText.setColor(colorToHex(session.rankedEligible ? UI_THEME.colors.success : UI_THEME.colors.textSoft));
   }
 
   public refresh(time: number): void {
@@ -399,170 +324,209 @@ export class UISystem {
     }
 
     const ratio = Phaser.Math.Clamp(this.player.health / this.player.maxHealth, 0, 1);
-    this.healthFill.displayWidth = 180 * ratio;
-    this.healthFill.fillColor = ratio > 0.55 ? UI_COLORS.success : ratio > 0.25 ? UI_COLORS.gold : UI_COLORS.danger;
-    this.healthText.setText(`${Math.ceil(this.player.health)} / ${this.player.maxHealth}`);
-    this.livesText.setText(`Жизни: ${this.player.lives}`);
-
+    const color =
+      ratio > 0.55 ? UI_THEME.colors.success : ratio > 0.25 ? UI_THEME.colors.warning : UI_THEME.colors.danger;
+    this.healthMeter.setValue(ratio, `${Math.ceil(this.player.health)} / ${this.player.maxHealth}`, color);
+    this.livesValueText.setText(String(this.player.lives));
     this.setPowerUps(this.player.getActivePowerUps(time));
   }
 
   public setScore(score: number): void {
     this.score = score;
-    this.scoreText.setText(`Счёт: ${this.score}`);
+    this.scoreValueText.setText(String(score));
   }
 
   public setWave(wave: number): void {
     this.wave = wave;
-    this.waveText.setText(`Волна: ${this.wave}`);
+    this.waveValueText.setText(String(wave));
   }
 
   public setBossHealth(current: number, max: number): void {
     const visible = max > 0 && current > 0;
-    this.bossBarBg.setVisible(visible);
-    this.bossBarFill.setVisible(visible);
-    this.bossBarText.setVisible(visible);
+    this.bossPanel.root.setVisible(visible);
 
     if (!visible) {
       return;
     }
 
     const ratio = Phaser.Math.Clamp(current / max, 0, 1);
-    this.bossBarFill.displayWidth = 340 * ratio;
-    this.bossBarText.setText(`Босс: ${Math.ceil(current)} / ${max}`);
+    this.bossBarFill.displayWidth = this.bossBarFill.width * ratio;
+    this.bossValueText.setText(`Босс • ${Math.ceil(current)} / ${max}`);
   }
 
   public setPowerUps(effects: ActivePowerUpState[]): void {
-    if (effects.length === 0) {
-      this.powerUpText.setText("Бонусы: нет");
+    const nextSignature = effects.map((effect) => effect.label).join("|");
+    if (nextSignature === this.powerUpSignature) {
       return;
     }
 
-    const text = effects.map((effect) => `${effect.label} ${(effect.remainingMs / 1000).toFixed(1)}с`).join(" • ");
-    this.powerUpText.setText(`Бонусы: ${text}`);
+    this.powerUpSignature = nextSignature;
+    while (this.powerUpChips.length > 0) {
+      this.powerUpChips.pop()?.destroy();
+    }
+    this.powerUpContainer.removeAll(true);
+
+    if (effects.length === 0) {
+      const emptyChip = createChip(this.scene, 0, 0, "нет активных модулей", {
+        width: 170,
+        color: UI_THEME.colors.textMuted,
+        fillColor: UI_THEME.colors.surface,
+        fillAlpha: 0.46,
+        depth: UI_THEME.depth.hud + 2
+      });
+      emptyChip.setPosition(-85, 0);
+      this.powerUpContainer.add(emptyChip);
+      this.powerUpChips.push(emptyChip);
+      return;
+    }
+
+    let offsetX = 0;
+    effects.forEach((effect, index) => {
+      const chip = createChip(this.scene, offsetX, 0, effect.label, {
+        width: Math.max(122, 34 + effect.label.length * 8),
+        color: index % 2 === 0 ? UI_THEME.colors.cyan : UI_THEME.colors.violet,
+        fillColor: UI_THEME.colors.surface,
+        fillAlpha: 0.72,
+        depth: UI_THEME.depth.hud + 2
+      });
+      chip.setPosition(offsetX - chip.width * 0.5, 0);
+      offsetX -= chip.width + 10;
+      this.powerUpContainer.add(chip);
+      this.powerUpChips.push(chip);
+    });
   }
 
   public showBanner(text: string): void {
     this.bannerTween?.stop();
     this.bannerText.setText(text);
-    this.bannerText.setAlpha(0);
-    this.bannerText.setVisible(true);
+    this.bannerPanel.root.setVisible(true);
+    this.bannerPanel.root.setAlpha(0);
+    this.bannerPanel.root.setScale(0.96);
 
     this.bannerTween = this.scene.tweens.add({
-      targets: this.bannerText,
-      alpha: { from: 0, to: 1 },
-      duration: 220,
-      hold: 1200,
+      targets: this.bannerPanel.root,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: UI_THEME.motion.normal,
+      ease: "Quad.easeOut",
+      hold: 1150,
       yoyo: true,
       onComplete: () => {
-        this.bannerText.setVisible(false);
+        this.bannerPanel.root.setVisible(false);
       }
     });
   }
 
   public showPauseOverlay(visible: boolean): void {
-    this.pauseOverlay.setVisible(visible);
-    this.pausePanel.setVisible(visible);
-    this.pauseText.setVisible(visible);
-    this.pauseHintText.setVisible(visible);
-    this.pauseMuteValueText.setVisible(visible);
-    this.pauseMusicValueText.setVisible(visible);
-    this.pauseSfxValueText.setVisible(visible);
+    this.pauseVisible = visible;
 
-    this.hudObjects.forEach((object) => {
-      if (object === this.pauseOverlay || object === this.pausePanel || object === this.pauseText || object === this.pauseHintText) {
-        return;
-      }
+    if (!visible) {
+      this.pauseSettingsVisible = false;
+      this.pauseSettingsButton.setLabel("Настройки");
+      this.pauseOverlay.setVisible(false);
+      this.pauseGlowPrimary.setVisible(false);
+      this.pauseGlowSecondary.setVisible(false);
+      this.pausePanel.root.setVisible(false);
+      this.pauseContinueButton.setVisible(false);
+      this.pauseSettingsButton.setVisible(false);
+      this.pauseExitButton.setVisible(false);
+      this.pauseSettingsPanel.setVisible(false);
+      return;
+    }
 
-      if (
-        object === this.pauseMuteValueText ||
-        object === this.pauseMusicValueText ||
-        object === this.pauseSfxValueText ||
-        (object instanceof Phaser.GameObjects.Text && object.depth === 122) ||
-        (object instanceof Phaser.GameObjects.Rectangle && object.depth === 123)
-      ) {
-        if ("setVisible" in object && typeof object.setVisible === "function") {
-          object.setVisible(visible);
-        }
-      }
+    this.pauseSettingsPanel.refresh();
+    this.pauseOverlay.setVisible(true).setAlpha(0);
+    this.pauseGlowPrimary.setVisible(true).setAlpha(0);
+    this.pauseGlowSecondary.setVisible(true).setAlpha(0);
+    this.pausePanel.root.setVisible(true).setAlpha(0).setScale(0.96);
+    this.pauseContinueButton.setVisible(true);
+    this.pauseSettingsButton.setVisible(true);
+    this.pauseExitButton.setVisible(true);
+    this.pauseSettingsPanel.setVisible(this.pauseSettingsVisible);
+
+    this.scene.tweens.add({
+      targets: this.pauseOverlay,
+      alpha: 0.76,
+      duration: UI_THEME.motion.normal,
+      ease: "Quad.easeOut"
+    });
+    this.scene.tweens.add({
+      targets: [this.pauseGlowPrimary, this.pauseGlowSecondary],
+      alpha: { from: 0, to: 1 },
+      duration: UI_THEME.motion.normal,
+      ease: "Quad.easeOut"
+    });
+    fadeScaleIn(this.scene, this.pausePanel.root, {
+      duration: UI_THEME.motion.normal,
+      scaleFrom: 0.96,
+      yOffset: 10
+    });
+    fadeScaleIn(this.scene, this.pauseContinueButton.root, {
+      delay: 24,
+      duration: UI_THEME.motion.normal,
+      scaleFrom: 0.98,
+      yOffset: 8
+    });
+    fadeScaleIn(this.scene, this.pauseSettingsButton.root, {
+      delay: 48,
+      duration: UI_THEME.motion.normal,
+      scaleFrom: 0.99,
+      yOffset: 8
+    });
+    fadeScaleIn(this.scene, this.pauseExitButton.root, {
+      delay: 72,
+      duration: UI_THEME.motion.normal,
+      scaleFrom: 0.99,
+      yOffset: 8
     });
 
-    this.setPauseControlsInteractive(visible);
-
-    if (visible) {
-      this.refreshAudioSettings();
+    if (this.pauseSettingsVisible) {
+      fadeScaleIn(this.scene, this.pauseSettingsPanel.root, {
+        delay: 90,
+        duration: UI_THEME.motion.normal,
+        scaleFrom: 0.97,
+        yOffset: 8
+      });
     }
   }
 
   public destroy(): void {
     this.bannerTween?.stop();
-    this.hudObjects.forEach((object) => object.destroy());
-    this.hudObjects.length = 0;
-    this.pauseButtons.length = 0;
+    while (this.components.length > 0) {
+      this.components.pop()?.destroy();
+    }
+    while (this.objects.length > 0) {
+      this.objects.pop()?.destroy();
+    }
+    this.powerUpChips.length = 0;
     this.player = undefined;
   }
 
-  private createPauseButton(
-    centerX: number,
-    centerY: number,
-    width: number,
-    height: number,
-    label: string,
-    onClick: () => void
-  ): void {
-    const background = this.scene.add
-      .rectangle(centerX, centerY, width, height, 0x1a3850, 0.96)
-      .setStrokeStyle(2, UI_COLORS.cyan, 0.32)
-      .setScrollFactor(0)
-      .setDepth(123)
-      .setVisible(false);
+  private togglePauseSettings(): void {
+    this.pauseSettingsVisible = !this.pauseSettingsVisible;
+    this.pauseSettingsButton.setLabel(this.pauseSettingsVisible ? "Скрыть настройки" : "Настройки");
+    this.pauseSettingsPanel.setVisible(this.pauseSettingsVisible);
 
-    const text = this.scene.add
-      .text(centerX, centerY, label, {
-        fontFamily: "Segoe UI, sans-serif",
-        fontSize: "16px",
-        color: "#eaf7ff",
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(124)
-      .setVisible(false);
-
-    background.setInteractive({ useHandCursor: true });
-    background.disableInteractive();
-    background.on("pointerover", () => {
-      background.setFillStyle(0x23506f, 1);
-      this.audioSystem.playSfx(SFX_KEYS.UI_HOVER);
-    });
-    background.on("pointerout", () => {
-      background.setFillStyle(0x1a3850, 0.96);
-    });
-    background.on("pointerdown", onClick);
-
-    this.pauseButtons.push({ background, label: text });
-    this.hudObjects.push(background, text);
+    if (this.pauseSettingsVisible) {
+      this.pauseSettingsPanel.refresh();
+      this.pauseSettingsPanel.root.setAlpha(0);
+      this.pauseSettingsPanel.root.setScale(0.97);
+      fadeScaleIn(this.scene, this.pauseSettingsPanel.root, {
+        duration: UI_THEME.motion.normal,
+        scaleFrom: 0.97,
+        yOffset: 8
+      });
+    }
   }
 
-  private refreshAudioSettings(): void {
-    const settings = this.audioSystem.getSettings();
-
-    this.pauseMuteValueText.setText(settings.masterMuted ? "Выкл" : "Вкл");
-    this.pauseMuteValueText.setColor(settings.masterMuted ? "#ff9eaa" : "#79f7c1");
-    this.pauseMusicValueText.setText(`${Math.round(settings.musicVolume * 100)}%`);
-    this.pauseSfxValueText.setText(`${Math.round(settings.sfxVolume * 100)}%`);
+  private trackObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.objects.push(object);
+    return object;
   }
 
-  private setPauseControlsInteractive(visible: boolean): void {
-    this.pauseButtons.forEach(({ background, label }) => {
-      background.setVisible(visible);
-      label.setVisible(visible);
-
-      if (visible) {
-        background.setInteractive({ useHandCursor: true });
-      } else {
-        background.disableInteractive();
-      }
-    });
+  private trackComponent<T extends DestroyableComponent>(component: T): T {
+    this.components.push(component);
+    return component;
   }
 }
