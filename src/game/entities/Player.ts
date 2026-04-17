@@ -20,6 +20,10 @@ export interface PlayerControls {
   up: Phaser.Input.Keyboard.Key;
   down: Phaser.Input.Keyboard.Key;
   fire: Phaser.Input.Keyboard.Key;
+  leftAlt?: Phaser.Input.Keyboard.Key;
+  rightAlt?: Phaser.Input.Keyboard.Key;
+  upAlt?: Phaser.Input.Keyboard.Key;
+  downAlt?: Phaser.Input.Keyboard.Key;
 }
 
 export interface PlayerDamageResult {
@@ -85,16 +89,16 @@ export class Player extends Phaser.Physics.Arcade.Image {
     let velocityX = 0;
     let velocityY = 0;
 
-    if (controls.left.isDown) {
+    if (controls.left.isDown || controls.leftAlt?.isDown) {
       velocityX -= 1;
     }
-    if (controls.right.isDown) {
+    if (controls.right.isDown || controls.rightAlt?.isDown) {
       velocityX += 1;
     }
-    if (controls.up.isDown) {
+    if (controls.up.isDown || controls.upAlt?.isDown) {
       velocityY -= 1;
     }
-    if (controls.down.isDown) {
+    if (controls.down.isDown || controls.downAlt?.isDown) {
       velocityY += 1;
     }
 

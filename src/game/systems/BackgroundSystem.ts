@@ -608,8 +608,10 @@ export class BackgroundSystem {
     for (let index = 0; index < steps; index += 1) {
       const t = index / Math.max(steps - 1, 1);
       const color = Phaser.Display.Color.Interpolate.ColorWithColor(top, bottom, 100, t * 100);
+      const y = Math.round((this.renderHeight * index) / steps);
+      const nextY = Math.round((this.renderHeight * (index + 1)) / steps);
       graphics.fillStyle(Phaser.Display.Color.GetColor(color.r, color.g, color.b), 1);
-      graphics.fillRect(0, (this.renderHeight / steps) * index, this.renderWidth, this.renderHeight / steps + 1);
+      graphics.fillRect(0, y, this.renderWidth, Math.max(1, nextY - y));
     }
 
     graphics.fillStyle(this.config.vignetteColor, 0.16);

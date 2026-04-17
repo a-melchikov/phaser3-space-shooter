@@ -45,7 +45,7 @@ export function createGlassPanel(scene: Phaser.Scene, options: GlassPanelOptions
   const glowLayers = options.glowLayers ?? 2;
   const glowStrength = options.glowStrength ?? 1;
   const showTopAccent = options.showTopAccent ?? false;
-  const highlightAlpha = options.highlightAlpha ?? 0.026;
+  const highlightAlpha = options.highlightAlpha ?? 0;
 
   for (let index = 0; index < glowLayers; index += 1) {
     const inset = index * 3;
@@ -62,14 +62,16 @@ export function createGlassPanel(scene: Phaser.Scene, options: GlassPanelOptions
 
   background.fillStyle(fillColor, fillAlpha);
   background.fillRoundedRect(-options.width * 0.5, -options.height * 0.5, options.width, options.height, radius);
-  background.fillStyle(0xffffff, highlightAlpha);
-  background.fillRoundedRect(
-    -options.width * 0.5 + 1,
-    -options.height * 0.5 + 1,
-    options.width - 2,
-    Math.max(36, options.height * 0.28),
-    radius
-  );
+  if (highlightAlpha > 0) {
+    background.fillStyle(0xffffff, highlightAlpha);
+    background.fillRoundedRect(
+      -options.width * 0.5 + 1,
+      -options.height * 0.5 + 1,
+      options.width - 2,
+      Math.max(36, options.height * 0.28),
+      radius
+    );
+  }
   background.lineStyle(1, borderColor, borderAlpha);
   background.strokeRoundedRect(-options.width * 0.5, -options.height * 0.5, options.width, options.height, radius);
 
@@ -161,6 +163,9 @@ export class UiButton {
   private readonly background: Phaser.GameObjects.Graphics;
   private readonly label: Phaser.GameObjects.Text;
   private readonly hitArea: Phaser.GameObjects.Zone;
+  private readonly width: number;
+  private readonly height: number;
+  private readonly variant: "primary" | "secondary" | "ghost";
   private enabled: boolean;
   private hovered = false;
   private pressed = false;
@@ -181,6 +186,9 @@ export class UiButton {
     }
   ) {
     this.enabled = options.enabled ?? true;
+    this.width = options.width;
+    this.height = options.height;
+    this.variant = options.variant ?? "primary";
     this.root = scene.add.container(options.x, options.y).setDepth(options.depth ?? 0);
     this.glow = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
     this.background = scene.add.graphics();
@@ -199,8 +207,6 @@ export class UiButton {
     this.hitArea.setInteractive({ useHandCursor: true });
 
     const audioSystem = options.audioSystem;
-    const variant = options.variant ?? "primary";
-
     this.hitArea.on("pointerover", () => {
       if (!this.enabled) {
         return;
@@ -208,7 +214,7 @@ export class UiButton {
 
       this.hovered = true;
       audioSystem?.playSfx(SFX_KEYS.UI_HOVER);
-      this.render(options.width, options.height, variant);
+      this.render(this.width, this.height, this.variant);
       this.scene.tweens.killTweensOf(this.root);
       this.scene.tweens.add({
         targets: this.root,
@@ -222,7 +228,7 @@ export class UiButton {
     this.hitArea.on("pointerout", () => {
       this.hovered = false;
       this.pressed = false;
-      this.render(options.width, options.height, variant);
+      this.render(this.width, this.height, this.variant);
       this.scene.tweens.killTweensOf(this.root);
       this.scene.tweens.add({
         targets: this.root,
@@ -239,7 +245,7 @@ export class UiButton {
       }
 
       this.pressed = true;
-      this.render(options.width, options.height, variant);
+      this.render(this.width, this.height, this.variant);
       this.root.setScale(0.98);
     });
 
@@ -249,14 +255,14 @@ export class UiButton {
       }
 
       this.pressed = false;
-      this.render(options.width, options.height, variant);
+      this.render(this.width, this.height, this.variant);
       this.root.setScale(this.hovered ? 1.02 : 1);
       audioSystem?.unlock();
       audioSystem?.playSfx(SFX_KEYS.UI_CLICK);
       options.onClick();
     });
 
-    this.render(options.width, options.height, variant);
+    this.render(this.width, this.height, this.variant);
   }
 
   public setLabel(value: string): void {
@@ -272,15 +278,20 @@ export class UiButton {
       this.hovered = false;
       this.pressed = false;
     }
+    this.render(this.width, this.height, this.variant);
   }
 
   public setVisible(value: boolean): void {
     this.root.setVisible(value);
+    this.hovered = false;
+    this.pressed = false;
     if (value && this.enabled) {
       this.hitArea.setInteractive({ useHandCursor: true });
     } else if (!value) {
       this.hitArea.disableInteractive();
     }
+    this.root.setScale(1);
+    this.render(this.width, this.height, this.variant);
   }
 
   public setPosition(x: number, y: number): void {

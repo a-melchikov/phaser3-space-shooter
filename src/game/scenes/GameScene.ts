@@ -129,7 +129,6 @@ export class GameScene extends Phaser.Scene {
       },
       onTransitionStateChange: (active) => {
         this.isTransitioning = active;
-        this.clearProjectiles();
       },
       onBanner: (text) => this.uiSystem.showBanner(text),
       spawnEnemy: (type) => this.spawnEnemy(type),
@@ -245,6 +244,10 @@ export class GameScene extends Phaser.Scene {
       right: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
       up: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
       down: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
+      leftAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+      rightAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+      upAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+      downAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       fire: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
     };
     this.pauseKeys = [
@@ -703,6 +706,18 @@ export class GameScene extends Phaser.Scene {
       this.input.keyboard?.removeKey(this.controls.right);
       this.input.keyboard?.removeKey(this.controls.up);
       this.input.keyboard?.removeKey(this.controls.down);
+      if (this.controls.leftAlt) {
+        this.input.keyboard?.removeKey(this.controls.leftAlt);
+      }
+      if (this.controls.rightAlt) {
+        this.input.keyboard?.removeKey(this.controls.rightAlt);
+      }
+      if (this.controls.upAlt) {
+        this.input.keyboard?.removeKey(this.controls.upAlt);
+      }
+      if (this.controls.downAlt) {
+        this.input.keyboard?.removeKey(this.controls.downAlt);
+      }
       this.input.keyboard?.removeKey(this.controls.fire);
       this.controls = undefined;
     }

@@ -13,7 +13,6 @@ export class AudioSettingsPanel {
   private readonly musicUpButton: UiButton;
   private readonly sfxDownButton: UiButton;
   private readonly sfxUpButton: UiButton;
-  private readonly muteValueText: Phaser.GameObjects.Text;
   private readonly musicValueText: Phaser.GameObjects.Text;
   private readonly sfxValueText: Phaser.GameObjects.Text;
 
@@ -66,17 +65,12 @@ export class AudioSettingsPanel {
     }).setOrigin(0, 0.5);
     this.panel.content.add(muteLabel);
 
-    this.muteValueText = addUiText(scene, contentWidth - 132, cursorY + 8, "", "bodySoft", {
-      color: colorToHex(UI_THEME.colors.text)
-    }).setOrigin(1, 0.5);
-    this.panel.content.add(this.muteValueText);
-
     this.muteButton = new UiButton(scene, {
-      x: -options.width * 0.5 + 24 + contentWidth - 58,
+      x: -options.width * 0.5 + 24 + contentWidth - 42,
       y: -height * 0.5 + 24 + cursorY + 8,
-      width: 116,
+      width: 84,
       height: 34,
-      label: "Переключить",
+      label: "Вкл",
       variant: "secondary",
       depth: (options.depth ?? 0) + 2,
       audioSystem,
@@ -201,8 +195,7 @@ export class AudioSettingsPanel {
 
   public refresh(): void {
     const settings = this.audioSystem.getSettings();
-    this.muteValueText.setText(settings.masterMuted ? "Выкл" : "Вкл");
-    this.muteValueText.setColor(colorToHex(settings.masterMuted ? UI_THEME.colors.danger : UI_THEME.colors.success));
+    this.muteButton.setLabel(settings.masterMuted ? "Выкл" : "Вкл");
     this.musicValueText.setText(`${Math.round(settings.musicVolume * 100)}%`);
     this.sfxValueText.setText(`${Math.round(settings.sfxVolume * 100)}%`);
   }

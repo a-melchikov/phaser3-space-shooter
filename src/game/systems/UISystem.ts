@@ -2,11 +2,12 @@ import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
 import type { ActivePowerUpState, SessionPresentation } from "../types/game";
+import { POWER_UP_TEXTURES } from "../utils/constants";
 import { getViewportCenterX, getViewportCenterY, getViewportHeight, getViewportWidth } from "../utils/viewport";
 import { AudioSystem } from "./AudioSystem";
 import { AudioSettingsPanel } from "../ui/audioPanel";
 import { UI_THEME, addUiText, colorToHex, fadeScaleIn } from "../ui/theme";
-import { UiButton, UiMeter, createAmbientOrb, createChip, createGlassPanel, createScreenOverlay, type UiPanel } from "../ui/primitives";
+import { UiButton, UiMeter, createAmbientOrb, createGlassPanel, createScreenOverlay, type UiPanel } from "../ui/primitives";
 
 interface UISystemOptions {
   onPauseResume?: () => void;
@@ -17,21 +18,28 @@ interface DestroyableComponent {
   destroy(): void;
 }
 
+interface PowerUpRow {
+  icon: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+}
+
 export class UISystem {
   private player?: Player;
   private readonly objects: Phaser.GameObjects.GameObject[] = [];
   private readonly components: DestroyableComponent[] = [];
   private readonly leftPanel: UiPanel;
   private readonly rightPanel: UiPanel;
+  private readonly powerUpPanel: UiPanel;
   private readonly bossPanel: UiPanel;
-  private readonly bannerPanel: UiPanel;
   private readonly pausePanel: UiPanel;
   private readonly healthMeter: UiMeter;
-  private readonly livesValueText: Phaser.GameObjects.Text;
+  private readonly livesIcons: Phaser.GameObjects.Text[] = [];
   private readonly scoreValueText: Phaser.GameObjects.Text;
   private readonly waveValueText: Phaser.GameObjects.Text;
   private readonly statusValueText: Phaser.GameObjects.Text;
   private readonly profileValueText: Phaser.GameObjects.Text;
+  private readonly powerUpEmptyText: Phaser.GameObjects.Text;
+  private readonly powerUpRows: PowerUpRow[] = [];
   private readonly bossBarFill: Phaser.GameObjects.Rectangle;
   private readonly bossValueText: Phaser.GameObjects.Text;
   private readonly bannerText: Phaser.GameObjects.Text;
@@ -43,19 +51,10 @@ export class UISystem {
   private readonly pauseContinueButton: UiButton;
   private readonly pauseSettingsButton: UiButton;
   private readonly pauseExitButton: UiButton;
-  private readonly powerUpLabelText: Phaser.GameObjects.Text;
-  private readonly powerUpContainer: Phaser.GameObjects.Container;
-  private readonly powerUpChips: Phaser.GameObjects.GameObject[] = [];
   private bannerTween?: Phaser.Tweens.Tween;
   private score = 0;
   private wave = 1;
   private powerUpSignature = "";
-  private sessionStatus: SessionPresentation = {
-    mode: "guest",
-    displayName: "Гость",
-    rankedEligible: false,
-    isGuest: true
-  };
   private pauseVisible = false;
   private pauseSettingsVisible = false;
 
@@ -69,22 +68,30 @@ export class UISystem {
     const viewportCenterX = getViewportCenterX(scene);
     const viewportCenterY = getViewportCenterY(scene);
 
+    const panelTop = 84;
+    const sidePanelWidth = 256;
+    const sidePanelPadding = 22;
+    const leftPanelX = 148;
+    const rightPanelX = viewportWidth - 148;
+
     this.leftPanel = this.trackComponent(
       createGlassPanel(scene, {
-        x: 138,
-        y: 76,
-        width: 240,
-        height: 106,
+        x: leftPanelX,
+        y: panelTop,
+        width: sidePanelWidth,
+        height: 124,
+        padding: sidePanelPadding,
         depth: UI_THEME.depth.hud,
         fillColor: UI_THEME.colors.panelStrong,
-        fillAlpha: 0.76
+        fillAlpha: 0.78,
+        showTopAccent: false
       })
     );
     this.healthMeter = this.trackComponent(
       new UiMeter(scene, {
         x: 0,
         y: 0,
-        width: 192,
+        width: 212,
         label: "Здоровье",
         valueText: "100 / 100",
         color: UI_THEME.colors.success,
@@ -94,21 +101,18 @@ export class UISystem {
     this.leftPanel.content.add(this.healthMeter.root);
 
     this.leftPanel.content.add(
-      addUiText(scene, 0, 56, "Жизни", "meta", {
+      addUiText(scene, 0, 64, "Жизни", "meta", {
         color: colorToHex(UI_THEME.colors.textSoft)
       }).setOrigin(0, 0)
     );
-    this.livesValueText = addUiText(scene, 0, 74, "3", "metric", {
-      fontSize: "20px"
-    }).setOrigin(0, 0);
-    this.leftPanel.content.add(this.livesValueText);
+    this.createLivesIcons();
 
     this.leftPanel.content.add(
-      addUiText(scene, 108, 56, "Счёт", "meta", {
+      addUiText(scene, 118, 64, "Счёт", "meta", {
         color: colorToHex(UI_THEME.colors.textSoft)
       }).setOrigin(0, 0)
     );
-    this.scoreValueText = addUiText(scene, 108, 74, "0", "metric", {
+    this.scoreValueText = addUiText(scene, 118, 76, "0", "metric", {
       fontSize: "20px",
       color: colorToHex(UI_THEME.colors.warning)
     }).setOrigin(0, 0);
@@ -116,15 +120,17 @@ export class UISystem {
 
     this.rightPanel = this.trackComponent(
       createGlassPanel(scene, {
-        x: viewportWidth - 138,
-        y: 88,
-        width: 244,
-        height: 138,
+        x: rightPanelX,
+        y: panelTop,
+        width: sidePanelWidth,
+        height: 164,
+        padding: sidePanelPadding,
         depth: UI_THEME.depth.hud,
         fillColor: UI_THEME.colors.panelStrong,
-        fillAlpha: 0.76,
+        fillAlpha: 0.78,
         glowColor: UI_THEME.colors.violet,
-        borderColor: UI_THEME.colors.lineSoft
+        borderColor: UI_THEME.colors.lineSoft,
+        showTopAccent: false
       })
     );
     this.rightPanel.content.add(addUiText(scene, 0, 0, "Текущая волна", "label").setOrigin(0, 0));
@@ -133,33 +139,50 @@ export class UISystem {
     }).setOrigin(0, 0);
     this.rightPanel.content.add(this.waveValueText);
 
-    this.rightPanel.content.add(addUiText(scene, 0, 62, "Статус", "meta", {
+    this.rightPanel.content.add(addUiText(scene, 0, 66, "Статус", "meta", {
       color: colorToHex(UI_THEME.colors.textSoft)
     }).setOrigin(0, 0));
-    this.statusValueText = addUiText(scene, 160, 62, "local only", "bodySoft", {
+    this.statusValueText = addUiText(scene, 190, 66, "local only", "bodySoft", {
       color: colorToHex(UI_THEME.colors.success),
       align: "right"
     }).setOrigin(1, 0);
     this.rightPanel.content.add(this.statusValueText);
 
-    this.rightPanel.content.add(addUiText(scene, 0, 86, "Профиль", "meta", {
+    this.rightPanel.content.add(addUiText(scene, 0, 94, "Профиль", "meta", {
       color: colorToHex(UI_THEME.colors.textSoft)
     }).setOrigin(0, 0));
-    this.profileValueText = addUiText(scene, 160, 86, "Гость", "bodySoft", {
-      align: "right"
-    }).setOrigin(1, 0);
+    this.profileValueText = addUiText(scene, 0, 114, "Гость", "bodySoft", {
+      color: colorToHex(UI_THEME.colors.text),
+      wordWrap: { width: 190, useAdvancedWrap: true },
+      maxLines: 2
+    }).setOrigin(0, 0);
     this.rightPanel.content.add(this.profileValueText);
 
-    this.powerUpLabelText = this.trackObject(
-      addUiText(scene, viewportWidth - 18, 148, "Бонусы", "meta", {
-        color: colorToHex(UI_THEME.colors.textMuted)
+    this.powerUpPanel = this.trackComponent(
+      createGlassPanel(scene, {
+        x: rightPanelX,
+        y: viewportHeight - 64,
+        width: sidePanelWidth,
+        height: 92,
+        padding: sidePanelPadding,
+        depth: UI_THEME.depth.hud,
+        fillColor: UI_THEME.colors.panelStrong,
+        fillAlpha: 0.74,
+        glowColor: UI_THEME.colors.cyan,
+        borderColor: UI_THEME.colors.line,
+        showTopAccent: false
       })
-        .setOrigin(1, 0)
-        .setDepth(UI_THEME.depth.hud + 1)
     );
-    this.powerUpContainer = this.trackObject(
-      scene.add.container(viewportWidth - 18, 172).setDepth(UI_THEME.depth.hud + 2)
+    this.powerUpPanel.content.add(addUiText(scene, 0, 0, "Бонусы", "meta", {
+      color: colorToHex(UI_THEME.colors.textMuted)
+    }).setOrigin(0, 0));
+    this.powerUpEmptyText = this.trackObject(
+      addUiText(scene, 0, 30, "нет активных модулей", "meta", {
+        color: colorToHex(UI_THEME.colors.textSoft)
+      }).setOrigin(0, 0)
     );
+    this.powerUpPanel.content.add(this.powerUpEmptyText);
+    this.createPowerUpRows();
 
     this.bossPanel = this.trackComponent(
       createGlassPanel(scene, {
@@ -192,25 +215,18 @@ export class UISystem {
     this.bossPanel.content.add(this.bossBarFill);
     this.bossPanel.root.setVisible(false);
 
-    this.bannerPanel = this.trackComponent(
-      createGlassPanel(scene, {
-        x: viewportCenterX,
-        y: viewportHeight * 0.24,
-        width: Math.min(320, viewportWidth - 80),
-        height: 62,
-        depth: UI_THEME.depth.banner,
-        fillColor: UI_THEME.colors.panelStrong,
-        fillAlpha: 0.9,
-        glowColor: UI_THEME.colors.cyan
+    this.bannerText = this.trackObject(
+      addUiText(scene, viewportCenterX, viewportHeight * 0.18, "", "sectionTitle", {
+        fontSize: "34px",
+        fontStyle: "700",
+        color: colorToHex(UI_THEME.colors.text),
+        stroke: colorToHex(UI_THEME.colors.ink),
+        strokeThickness: 6
       })
+        .setOrigin(0.5)
+        .setDepth(UI_THEME.depth.banner)
+        .setAlpha(0)
     );
-    this.bannerText = addUiText(scene, 0, 7, "", "sectionTitle", {
-      fontSize: "20px",
-      align: "center",
-      color: colorToHex(UI_THEME.colors.text)
-    }).setOrigin(0, 0);
-    this.bannerPanel.content.add(this.bannerText);
-    this.bannerPanel.root.setVisible(false);
 
     this.pauseOverlay = this.trackObject(createScreenOverlay(scene, UI_THEME.colors.shadow, 0.76, UI_THEME.depth.overlay));
     this.pauseOverlay.setVisible(false);
@@ -229,7 +245,7 @@ export class UISystem {
         x: viewportCenterX,
         y: viewportCenterY - 12,
         width: Math.min(420, viewportWidth - 48),
-        height: 248,
+        height: 292,
         depth: UI_THEME.depth.overlayContent,
         fillColor: UI_THEME.colors.panelStrong,
         fillAlpha: 0.94,
@@ -249,7 +265,7 @@ export class UISystem {
     this.pauseContinueButton = this.trackComponent(
       new UiButton(scene, {
         x: 0,
-        y: 108,
+        y: -6,
         width: Math.min(300, viewportWidth - 120),
         height: 46,
         label: "Продолжить",
@@ -265,7 +281,7 @@ export class UISystem {
     this.pauseSettingsButton = this.trackComponent(
       new UiButton(scene, {
         x: 0,
-        y: 162,
+        y: 55,
         width: Math.min(300, viewportWidth - 120),
         height: 40,
         label: "Настройки",
@@ -281,7 +297,7 @@ export class UISystem {
     this.pauseExitButton = this.trackComponent(
       new UiButton(scene, {
         x: 0,
-        y: 210,
+        y: 109,
         width: Math.min(300, viewportWidth - 120),
         height: 38,
         label: "Выйти в меню",
@@ -312,7 +328,6 @@ export class UISystem {
   }
 
   public setSessionStatus(session: SessionPresentation): void {
-    this.sessionStatus = session;
     this.profileValueText.setText(session.isGuest ? "Гость" : session.displayName);
     this.statusValueText.setText(session.rankedEligible ? "online ready" : "local only");
     this.statusValueText.setColor(colorToHex(session.rankedEligible ? UI_THEME.colors.success : UI_THEME.colors.textSoft));
@@ -327,7 +342,7 @@ export class UISystem {
     const color =
       ratio > 0.55 ? UI_THEME.colors.success : ratio > 0.25 ? UI_THEME.colors.warning : UI_THEME.colors.danger;
     this.healthMeter.setValue(ratio, `${Math.ceil(this.player.health)} / ${this.player.maxHealth}`, color);
-    this.livesValueText.setText(String(this.player.lives));
+    this.updateLivesIcons(this.player.lives);
     this.setPowerUps(this.player.getActivePowerUps(time));
   }
 
@@ -355,56 +370,39 @@ export class UISystem {
   }
 
   public setPowerUps(effects: ActivePowerUpState[]): void {
-    const nextSignature = effects.map((effect) => effect.label).join("|");
+    const nextSignature = effects.map((effect) => effect.type).join("|");
     if (nextSignature === this.powerUpSignature) {
       return;
     }
 
     this.powerUpSignature = nextSignature;
-    while (this.powerUpChips.length > 0) {
-      this.powerUpChips.pop()?.destroy();
-    }
-    this.powerUpContainer.removeAll(true);
+    this.powerUpEmptyText.setVisible(effects.length === 0);
 
-    if (effects.length === 0) {
-      const emptyChip = createChip(this.scene, 0, 0, "нет активных модулей", {
-        width: 170,
-        color: UI_THEME.colors.textMuted,
-        fillColor: UI_THEME.colors.surface,
-        fillAlpha: 0.46,
-        depth: UI_THEME.depth.hud + 2
-      });
-      emptyChip.setPosition(-85, 0);
-      this.powerUpContainer.add(emptyChip);
-      this.powerUpChips.push(emptyChip);
-      return;
-    }
+    this.powerUpRows.forEach((row, index) => {
+      const effect = effects[index];
+      const visible = Boolean(effect);
 
-    let offsetX = 0;
-    effects.forEach((effect, index) => {
-      const chip = createChip(this.scene, offsetX, 0, effect.label, {
-        width: Math.max(122, 34 + effect.label.length * 8),
-        color: index % 2 === 0 ? UI_THEME.colors.cyan : UI_THEME.colors.violet,
-        fillColor: UI_THEME.colors.surface,
-        fillAlpha: 0.72,
-        depth: UI_THEME.depth.hud + 2
-      });
-      chip.setPosition(offsetX - chip.width * 0.5, 0);
-      offsetX -= chip.width + 10;
-      this.powerUpContainer.add(chip);
-      this.powerUpChips.push(chip);
+      row.icon.setVisible(visible);
+      row.label.setVisible(visible);
+
+      if (!effect) {
+        return;
+      }
+
+      row.icon.setTexture(POWER_UP_TEXTURES[effect.type]);
+      row.label.setText(effect.label);
     });
   }
 
   public showBanner(text: string): void {
     this.bannerTween?.stop();
+    this.scene.tweens.killTweensOf(this.bannerText);
+
     this.bannerText.setText(text);
-    this.bannerPanel.root.setVisible(true);
-    this.bannerPanel.root.setAlpha(0);
-    this.bannerPanel.root.setScale(0.96);
+    this.bannerText.setAlpha(0).setScale(0.92);
 
     this.bannerTween = this.scene.tweens.add({
-      targets: this.bannerPanel.root,
+      targets: this.bannerText,
       alpha: 1,
       scaleX: 1,
       scaleY: 1,
@@ -413,7 +411,7 @@ export class UISystem {
       hold: 1150,
       yoyo: true,
       onComplete: () => {
-        this.bannerPanel.root.setVisible(false);
+        this.bannerText.setAlpha(0);
       }
     });
   }
@@ -499,8 +497,49 @@ export class UISystem {
     while (this.objects.length > 0) {
       this.objects.pop()?.destroy();
     }
-    this.powerUpChips.length = 0;
     this.player = undefined;
+  }
+
+  private createLivesIcons(): void {
+    for (let index = 0; index < 3; index += 1) {
+      const icon = this.trackObject(
+        addUiText(this.scene, index * 18, 74, "♥", "body", {
+          fontFamily: UI_THEME.fonts.display,
+          fontSize: "24px",
+          color: colorToHex(UI_THEME.colors.danger)
+        }).setOrigin(0, 0)
+      );
+      this.leftPanel.content.add(icon);
+      this.livesIcons.push(icon);
+    }
+
+    this.updateLivesIcons(3);
+  }
+
+  private updateLivesIcons(lives: number): void {
+    this.livesIcons.forEach((icon, index) => {
+      const active = index < lives;
+      icon.setAlpha(active ? 1 : 0.24);
+      icon.setColor(colorToHex(active ? UI_THEME.colors.danger : UI_THEME.colors.textMuted));
+    });
+  }
+
+  private createPowerUpRows(): void {
+    for (let index = 0; index < 2; index += 1) {
+      const y = 30 + index * 24;
+      const icon = this.trackObject(
+        this.scene.add.image(8, y + 6, POWER_UP_TEXTURES.heal)
+          .setScale(0.55)
+          .setVisible(false)
+      );
+      const label = this.trackObject(
+        addUiText(this.scene, 24, y - 2, "", "meta", {
+          color: colorToHex(UI_THEME.colors.cyan)
+        }).setOrigin(0, 0).setVisible(false)
+      );
+      this.powerUpPanel.content.add([icon, label]);
+      this.powerUpRows.push({ icon, label });
+    }
   }
 
   private togglePauseSettings(): void {

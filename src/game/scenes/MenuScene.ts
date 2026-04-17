@@ -27,6 +27,8 @@ export class MenuScene extends Phaser.Scene {
   private authUnsubscribe?: () => void;
   private readonly contentObjects: Phaser.GameObjects.GameObject[] = [];
   private readonly components: DestroyableComponent[] = [];
+  private readonly settingsOverlayObjects: Phaser.GameObjects.GameObject[] = [];
+  private readonly settingsOverlayComponents: DestroyableComponent[] = [];
   private audioSystem!: AudioSystem;
   private session: UserSession = createGuestSession();
   private isStarting = false;
@@ -68,8 +70,7 @@ export class MenuScene extends Phaser.Scene {
     this.background?.update(time);
 
     if (this.isSettingsOpen && this.escapeKey && Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
-      this.isSettingsOpen = false;
-      this.renderContent();
+      this.closeSettingsOverlay();
       return;
     }
 
@@ -114,14 +115,14 @@ export class MenuScene extends Phaser.Scene {
     const practiceScores = getGameAppContext().resultsService.getPracticeScores();
     const googleAvailable = getGameAppContext().authService.isGoogleLoginAvailable();
     const panelWidth = Math.min(viewportWidth - 48, compact ? 468 : 586);
-    const actionPanelHeight = compact ? 310 : 345;
-    const leaderboardHeight = compact ? 170 : 206;
-    const footerHeight = compact ? 74 : 92;
-    const stackGap = compact ? 14 : 18;
+    const actionPanelHeight = compact ? 286 : 320;
+    const leaderboardHeight = compact ? 178 : 226;
+    const footerHeight = compact ? 62 : 76;
+    const stackGap = compact ? 10 : 12;
     const titleBlockHeight = compact ? 68 : 82;
     const actionPanelLift = compact ? 14 : 20;
     const totalHeight = titleBlockHeight + actionPanelHeight + leaderboardHeight + footerHeight + stackGap * 3;
-    const startY = Math.max(compact ? 18 : 28, Math.round((viewportHeight - totalHeight) * 0.5));
+    const startY = Math.max(compact ? 8 : 16, Math.round((viewportHeight - totalHeight) * 0.5) - (compact ? 10 : 12));
     const titleY = startY + (compact ? 8 : 10);
     const actionPanelY = startY + titleBlockHeight + stackGap + actionPanelHeight * 0.5 - actionPanelLift;
     const leaderboardY = actionPanelY + actionPanelHeight * 0.5 + stackGap + leaderboardHeight * 0.5 - actionPanelLift * 0.25;
@@ -209,7 +210,7 @@ export class MenuScene extends Phaser.Scene {
         borderAlpha: 0.12,
         glowStrength: 0.4,
         glowLayers: 1,
-        padding: compact ? 18 : 24,
+        padding: compact ? 12 : 16,
         highlightAlpha: 0.014
       })
     );
@@ -235,12 +236,12 @@ export class MenuScene extends Phaser.Scene {
     const secondaryLabel = this.resolveSecondaryActionLabel(googleAvailable);
     const panelTop = panel.root.y - panelHeight * 0.5;
     const leftX = panel.root.x - panelWidth * 0.5 + innerPadding;
-    const actionBaseY = compact ? panel.root.y + 44 : panel.root.y + 54;
+    const actionBaseY = compact ? panel.root.y - 2 : panel.root.y + 6;
     const headerTop = 0;
     const nameTop = compact ? 26 : 30;
     const sublineTop = compact ? 58 : 66;
-    const dividerY = compact ? 94 : 104;
-    const bodyTop = compact ? 108 : 122;
+    const dividerY = compact ? 88 : 96;
+    const bodyTop = compact ? 98 : 110;
 
     panel.content.add(
       addUiText(this, 0, headerTop, "ПРОФИЛЬ", "label", {
@@ -330,8 +331,12 @@ export class MenuScene extends Phaser.Scene {
         depth: UI_THEME.depth.menu + 6,
         audioSystem: this.audioSystem,
         onClick: () => {
-          this.isSettingsOpen = !this.isSettingsOpen;
-          this.renderContent();
+          if (this.isSettingsOpen) {
+            this.closeSettingsOverlay();
+            return;
+          }
+
+          this.openSettingsOverlay();
         }
       })
     );
@@ -341,7 +346,7 @@ export class MenuScene extends Phaser.Scene {
     fadeScaleIn(this, settingsButton.root, { delay: 130, scaleFrom: 0.995, yOffset: 4 });
 
     const helper = this.trackObject(
-      addUiText(this, leftX + contentWidth * 0.5, panelTop + panelHeight - (compact ? 20 : 24), this.resolveActionHint(googleAvailable), "meta", {
+      addUiText(this, leftX + contentWidth * 0.5, panelTop + panelHeight - (compact ? 14 : 18), this.resolveActionHint(googleAvailable), "meta", {
         color: colorToHex(UI_THEME.colors.textMuted),
         align: "center",
         wordWrap: { width: panelWidth - innerPadding * 2 }
@@ -498,9 +503,9 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private populateControlsPanel(panel: UiPanel, panelWidth: number, compact: boolean): void {
-    const contentWidth = panelWidth - (compact ? 36 : 48);
+    const contentWidth = panelWidth - (compact ? 32 : 40);
     const columnWidth = contentWidth / 3;
-    const keys = ["СТРЕЛКИ", "SPACE", "P / ESC"];
+    const keys = ["СТРЕЛКИ / WASD", "SPACE", "P / ESC"];
     const captions = ["движение", "выстрел", "пауза"];
 
     for (let index = 0; index < 3; index += 1) {
@@ -510,48 +515,95 @@ export class MenuScene extends Phaser.Scene {
       if (index < 2) {
         const divider = this.add.graphics();
         divider.lineStyle(1, UI_THEME.colors.line, 0.08);
-        divider.lineBetween(dividerX, compact ? 12 : 14, dividerX, compact ? 50 : 56);
+        divider.lineBetween(dividerX, compact ? 6 : 8, dividerX, compact ? 36 : 40);
         panel.content.add(divider);
       }
 
       panel.content.add(
-        addUiText(this, centerX, compact ? 14 : 18, keys[index] ?? "", "label", {
+        addUiText(this, centerX, compact ? 4 : 6, keys[index] ?? "", "label", {
           color: colorToHex(index === 0 ? UI_THEME.colors.cyan : index === 1 ? UI_THEME.colors.text : UI_THEME.colors.lineSoft),
-          align: "center"
+          align: "center",
+          fontSize: compact ? "16px" : "18px"
         }).setOrigin(0.5, 0)
       );
 
       panel.content.add(
-        addUiText(this, centerX, compact ? 38 : 46, captions[index] ?? "", "meta", {
+        addUiText(this, centerX, compact ? 22 : 24, captions[index] ?? "", "meta", {
           color: colorToHex(UI_THEME.colors.textMuted),
           align: "center",
+          fontSize: compact ? "11px" : "12px",
           wordWrap: { width: columnWidth - 18 }
         }).setOrigin(0.5, 0)
       );
     }
   }
 
+  private openSettingsOverlay(): void {
+    if (this.isSettingsOpen) {
+      return;
+    }
+
+    this.isSettingsOpen = true;
+    this.renderSettingsOverlay();
+  }
+
+  private closeSettingsOverlay(): void {
+    if (!this.isSettingsOpen) {
+      return;
+    }
+
+    this.isSettingsOpen = false;
+    this.destroySettingsOverlay();
+  }
+
+  private trackSettingsOverlayObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.settingsOverlayObjects.push(object);
+    return object;
+  }
+
+  private trackSettingsOverlayComponent<T extends DestroyableComponent>(component: T): T {
+    this.settingsOverlayComponents.push(component);
+    return component;
+  }
+
+  private destroySettingsOverlay(): void {
+    while (this.settingsOverlayComponents.length > 0) {
+      this.settingsOverlayComponents.pop()?.destroy();
+    }
+
+    while (this.settingsOverlayObjects.length > 0) {
+      this.settingsOverlayObjects.pop()?.destroy();
+    }
+  }
+
   private renderSettingsOverlay(): void {
-    const overlay = this.trackObject(createScreenOverlay(this, UI_THEME.colors.shadow, 0.46, UI_THEME.depth.overlay));
-    overlay.setInteractive({ useHandCursor: true });
-    overlay.on("pointerdown", () => {
-      this.isSettingsOpen = false;
-      this.renderContent();
+    this.destroySettingsOverlay();
+
+    const overlay = this.trackSettingsOverlayObject(createScreenOverlay(this, UI_THEME.colors.shadow, 0.72, UI_THEME.depth.overlay));
+    overlay.setAlpha(0);
+    overlay.setInteractive();
+    overlay.on("pointerdown", (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+    });
+    this.tweens.add({
+      targets: overlay,
+      alpha: 0.9,
+      duration: UI_THEME.motion.normal,
+      ease: "Quad.easeOut"
     });
 
-    const settingsPanel = this.trackComponent(
+    const settingsPanel = this.trackSettingsOverlayComponent(
       new AudioSettingsPanel(this, this.audioSystem, {
         x: getViewportCenterX(this),
         y: getViewportHeight(this) * 0.56,
         width: Math.min(getViewportWidth(this) - 44, 360),
         title: "Настройки звука",
-        subtitle: "Изменения сохраняются между сессиями.",
         depth: UI_THEME.depth.overlayContent
       })
     );
     fadeScaleIn(this, settingsPanel.root, { scaleFrom: 0.97, yOffset: 8, duration: UI_THEME.motion.normal });
 
-    const closeButton = this.trackComponent(
+    const closeButton = this.trackSettingsOverlayComponent(
       new UiButton(this, {
         x: getViewportCenterX(this),
         y: getViewportHeight(this) * 0.56 + 138,
@@ -562,8 +614,7 @@ export class MenuScene extends Phaser.Scene {
         depth: UI_THEME.depth.overlayContent + 2,
         audioSystem: this.audioSystem,
         onClick: () => {
-          this.isSettingsOpen = false;
-          this.renderContent();
+          this.closeSettingsOverlay();
         }
       })
     );
@@ -592,7 +643,7 @@ export class MenuScene extends Phaser.Scene {
 
   private resolveModeDescription(googleAvailable: boolean): string {
     if (this.isAuthBusy) {
-      return "Синхронизируем профиль и обновляем доступ к рейтингу.";
+      return "";
     }
 
     if (!googleAvailable) {
@@ -623,10 +674,6 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private isSecondaryActionEnabled(googleAvailable: boolean): boolean {
-    if (this.isAuthBusy) {
-      return false;
-    }
-
     return this.session.isGuest ? googleAvailable : true;
   }
 
@@ -716,6 +763,8 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private destroyContent(): void {
+    this.destroySettingsOverlay();
+
     while (this.components.length > 0) {
       this.components.pop()?.destroy();
     }
