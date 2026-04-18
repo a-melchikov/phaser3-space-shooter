@@ -132,6 +132,14 @@ export interface RankedSubmitResponse {
   rank: number | null;
 }
 
+export interface MenuLeaderboardSnapshot {
+  mode: "online" | "fallback";
+  topEntries: LeaderboardEntry[];
+  playerProfile: PlayerLeaderboardProfile | null;
+  statusMessage: string;
+  fallbackReason?: string;
+}
+
 export interface ActivePowerUpState {
   type: PowerUpType;
   label: string;

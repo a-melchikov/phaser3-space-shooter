@@ -4,7 +4,7 @@ import { createGuestSession, type UserSession } from "../../auth/types";
 import { getGameAppContext } from "../appContext";
 import { AudioSystem } from "../systems/AudioSystem";
 import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
-import type { GameStartPayload, PracticeScoreEntry } from "../types/game";
+import type { GameStartPayload, MenuLeaderboardSnapshot, PracticeScoreEntry } from "../types/game";
 import type { ResumeMetadata } from "../types/runState";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
@@ -38,6 +38,9 @@ export class MenuScene extends Phaser.Scene {
   private authMessageColor = colorToHex(UI_THEME.colors.textSoft);
   private isSettingsOpen = false;
   private resumeMetadata: ResumeMetadata | null = null;
+  private leaderboardSnapshot: MenuLeaderboardSnapshot | null = null;
+  private isLeaderboardLoading = false;
+  private leaderboardRequestId = 0;
 
   public constructor() {
     super(SCENE_KEYS.MENU);
@@ -52,6 +55,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.createBackground();
     this.renderContent();
+    void this.refreshLeaderboardSnapshot();
 
     this.enterKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
@@ -65,6 +69,7 @@ export class MenuScene extends Phaser.Scene {
       this.isAuthBusy = false;
       this.resumeMetadata = getGameAppContext().runStateStore.getResumeMetadata();
       this.renderContent();
+      void this.refreshLeaderboardSnapshot();
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
@@ -116,7 +121,6 @@ export class MenuScene extends Phaser.Scene {
     const viewportHeight = getViewportHeight(this);
     const viewportWidth = getViewportWidth(this);
     const compact = isCompactViewport(this);
-    const practiceScores = getGameAppContext().resultsService.getPracticeScores();
     const googleAvailable = getGameAppContext().authService.isGoogleLoginAvailable();
     const panelWidth = Math.min(viewportWidth - 48, compact ? 468 : 586);
     const actionPanelHeight = compact
@@ -199,7 +203,7 @@ export class MenuScene extends Phaser.Scene {
         highlightAlpha: 0.018
       })
     );
-    this.populateLeaderboardPanel(leaderboardPanel, panelWidth, compact, practiceScores);
+    this.populateOnlineLeaderboardPanel(leaderboardPanel, panelWidth, compact);
     fadeScaleIn(this, leaderboardPanel.root, { delay: 95, scaleFrom: 0.99, yOffset: 8 });
 
     const controlsPanel = this.trackComponent(
@@ -536,6 +540,295 @@ export class MenuScene extends Phaser.Scene {
     return `${this.truncateLabel(entry.playerLabel, maxLength)} • ${modeLabel}`;
   }
 
+  private populateOnlineLeaderboardPanel(panel: UiPanel, panelWidth: number, compact: boolean): void {
+    const snapshot = this.leaderboardSnapshot;
+    const contentWidth = panelWidth - 44;
+    const isFallback = snapshot?.mode === "fallback";
+
+    panel.content.add(
+      addUiText(
+        this,
+        0,
+        0,
+        snapshot ? (isFallback ? "Локальный backup leaderboard" : "Глобальный leaderboard") : "Загрузка leaderboard",
+        "sectionTitle",
+        {
+          fontSize: compact ? "20px" : "22px"
+        }
+      ).setOrigin(0, 0)
+    );
+    panel.content.add(
+      addUiText(
+        this,
+        0,
+        28,
+        snapshot
+          ? (isFallback ? "Показываем лучшие забеги на этом устройстве" : "Общий онлайн-рейтинг всех пилотов")
+          : "Подключаемся к online-таблице",
+        "meta",
+        {
+          color: colorToHex(UI_THEME.colors.textMuted)
+        }
+      ).setOrigin(0, 0)
+    );
+    panel.content.add(
+      addUiText(this, contentWidth, 4, this.resolveLeaderboardStatusLabel(snapshot), "meta", {
+        color: colorToHex(this.resolveLeaderboardStatusColor(snapshot)),
+        align: "right"
+      }).setOrigin(1, 0)
+    );
+
+    if (!snapshot) {
+      panel.content.add(
+        addUiText(this, 0, 82, "Загружаем глобальный рейтинг и ваш онлайн-статус...", "bodySoft", {
+          wordWrap: { width: contentWidth }
+        }).setOrigin(0, 0)
+      );
+      return;
+    }
+
+    const personalCardY = compact ? 62 : 60;
+    const personalCardHeight = compact ? 52 : 58;
+    const personalCard = this.add.graphics();
+    personalCard.fillStyle(
+      snapshot.playerProfile ? UI_THEME.colors.surface : UI_THEME.colors.panelStrong,
+      snapshot.playerProfile ? 0.22 : 0.16
+    );
+    personalCard.fillRoundedRect(0, personalCardY, contentWidth, personalCardHeight, 14);
+    personalCard.lineStyle(1, snapshot.playerProfile ? UI_THEME.colors.cyan : UI_THEME.colors.lineSoft, 0.1);
+    personalCard.strokeRoundedRect(0, personalCardY, contentWidth, personalCardHeight, 14);
+    panel.content.add(personalCard);
+
+    panel.content.add(
+      addUiText(this, 14, personalCardY + 10, "ВАШ ONLINE STATUS", "label", {
+        color: colorToHex(snapshot.playerProfile ? UI_THEME.colors.cyan : UI_THEME.colors.textSoft)
+      }).setOrigin(0, 0)
+    );
+    panel.content.add(
+      addUiText(this, 14, personalCardY + 28, this.resolvePersonalRankHeadline(snapshot), "body", {
+        color: colorToHex(UI_THEME.colors.text),
+        fontStyle: "700"
+      }).setOrigin(0, 0)
+    );
+    panel.content.add(
+      addUiText(this, contentWidth - 14, personalCardY + 28, this.resolvePersonalRankMeta(snapshot), "meta", {
+        color: colorToHex(snapshot.playerProfile ? UI_THEME.colors.success : UI_THEME.colors.textMuted),
+        align: "right"
+      }).setOrigin(1, 0)
+    );
+
+    if (snapshot.fallbackReason) {
+      panel.content.add(
+        addUiText(this, 0, personalCardY + personalCardHeight + 10, snapshot.fallbackReason, "meta", {
+          color: colorToHex(UI_THEME.colors.warning),
+          wordWrap: { width: contentWidth }
+        }).setOrigin(0, 0)
+      );
+    }
+
+    const entries = snapshot.topEntries.slice(0, compact ? 3 : 5);
+    const rowsStartY = personalCardY + personalCardHeight + (snapshot.fallbackReason ? 34 : 18);
+
+    if (entries.length === 0) {
+      panel.content.add(
+        addUiText(
+          this,
+          0,
+          rowsStartY,
+          isFallback
+            ? "Пока нет локальных результатов. Сыграйте первый матч, и таблица заполнится."
+            : "Онлайн-таблица пока пуста. Первый ranked-run появится здесь.",
+          "bodySoft",
+          {
+            wordWrap: { width: contentWidth }
+          }
+        ).setOrigin(0, 0)
+      );
+      return;
+    }
+
+    if (compact) {
+      this.populateOnlineCompactLeaderboard(panel, contentWidth, rowsStartY, entries, snapshot);
+      return;
+    }
+
+    const headerY = rowsStartY;
+    const rowHeight = 38;
+    const columns = {
+      rank: 0,
+      score: 50,
+      wave: 172,
+      player: 244,
+      date: contentWidth
+    };
+
+    const headerDivider = this.add.graphics();
+    headerDivider.lineStyle(1, UI_THEME.colors.lineSoft, 0.08);
+    headerDivider.lineBetween(0, headerY + 20, contentWidth, headerY + 20);
+    panel.content.add(headerDivider);
+
+    panel.content.add(addUiText(this, columns.rank, headerY, "RANK", "meta", {
+      color: colorToHex(UI_THEME.colors.textMuted)
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, columns.score, headerY, "SCORE", "meta", {
+      color: colorToHex(UI_THEME.colors.textMuted)
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, columns.wave, headerY, "WAVE", "meta", {
+      color: colorToHex(UI_THEME.colors.textMuted)
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, columns.player, headerY, "PLAYER", "meta", {
+      color: colorToHex(UI_THEME.colors.textMuted)
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, columns.date, headerY, "DATE", "meta", {
+      color: colorToHex(UI_THEME.colors.textMuted),
+      align: "right"
+    }).setOrigin(1, 0));
+
+    entries.forEach((entry, index) => {
+      const rowY = headerY + 28 + index * rowHeight;
+      const rowBackground = this.add.graphics();
+      const isCurrentPlayer = this.isCurrentPlayerEntry(snapshot, entry);
+
+      rowBackground.fillStyle(
+        isCurrentPlayer ? UI_THEME.colors.surface : index === 0 ? UI_THEME.colors.surface : UI_THEME.colors.panelStrong,
+        isCurrentPlayer ? 0.24 : index === 0 ? 0.2 : 0.12
+      );
+      rowBackground.fillRoundedRect(-8, rowY - 8, contentWidth + 16, 32, 12);
+      rowBackground.lineStyle(
+        1,
+        isCurrentPlayer ? UI_THEME.colors.cyan : index === 0 ? UI_THEME.colors.warning : UI_THEME.colors.lineSoft,
+        isCurrentPlayer ? 0.12 : index === 0 ? 0.08 : 0.035
+      );
+      rowBackground.strokeRoundedRect(-8, rowY - 8, contentWidth + 16, 32, 12);
+      panel.content.add(rowBackground);
+
+      panel.content.add(
+        addUiText(this, columns.rank, rowY, `#${entry.rank}`, "label", {
+          color: colorToHex(isCurrentPlayer ? UI_THEME.colors.cyan : index === 0 ? UI_THEME.colors.warning : UI_THEME.colors.cyan)
+        }).setOrigin(0, 0)
+      );
+      panel.content.add(
+        addUiText(this, columns.score, rowY, String(entry.bestScore), "body", {
+          fontStyle: index === 0 || isCurrentPlayer ? "700" : "500",
+          color: colorToHex(UI_THEME.colors.text)
+        }).setOrigin(0, 0)
+      );
+      panel.content.add(addUiText(this, columns.wave, rowY, String(entry.bestWave), "bodySoft", {
+        color: colorToHex(UI_THEME.colors.textSoft)
+      }).setOrigin(0, 0));
+      panel.content.add(
+        addUiText(this, columns.player, rowY, this.resolveOnlineLeaderboardPlayer(entry.displayName, isCurrentPlayer), "meta", {
+          color: colorToHex(isCurrentPlayer ? UI_THEME.colors.text : UI_THEME.colors.textSoft)
+        }).setOrigin(0, 0)
+      );
+      panel.content.add(
+        addUiText(this, columns.date, rowY, formatHighscoreDate(entry.bestScoreAt), "meta", {
+          color: colorToHex(UI_THEME.colors.textMuted),
+          align: "right"
+        }).setOrigin(1, 0)
+      );
+    });
+  }
+
+  private populateOnlineCompactLeaderboard(
+    panel: UiPanel,
+    contentWidth: number,
+    startY: number,
+    entries: MenuLeaderboardSnapshot["topEntries"],
+    snapshot: MenuLeaderboardSnapshot
+  ): void {
+    const rowHeight = 44;
+    entries.forEach((entry, index) => {
+      const rowY = startY + index * rowHeight;
+      const rowBackground = this.add.graphics();
+      const isCurrentPlayer = this.isCurrentPlayerEntry(snapshot, entry);
+
+      rowBackground.fillStyle(
+        isCurrentPlayer ? UI_THEME.colors.surface : index === 0 ? UI_THEME.colors.surface : UI_THEME.colors.panelStrong,
+        isCurrentPlayer ? 0.24 : index === 0 ? 0.2 : 0.12
+      );
+      rowBackground.fillRoundedRect(-6, rowY - 6, contentWidth + 12, 36, 12);
+      panel.content.add(rowBackground);
+
+      panel.content.add(
+        addUiText(this, 0, rowY, `#${entry.rank}`, "label", {
+          color: colorToHex(isCurrentPlayer ? UI_THEME.colors.cyan : index === 0 ? UI_THEME.colors.warning : UI_THEME.colors.cyan)
+        }).setOrigin(0, 0)
+      );
+      panel.content.add(
+        addUiText(this, 34, rowY, String(entry.bestScore), "body", {
+          fontStyle: index === 0 || isCurrentPlayer ? "700" : "500",
+          color: colorToHex(UI_THEME.colors.text)
+        }).setOrigin(0, 0)
+      );
+      panel.content.add(
+        addUiText(this, 114, rowY, `W${entry.bestWave}`, "meta", {
+          color: colorToHex(UI_THEME.colors.textSoft)
+        }).setOrigin(0, 0)
+      );
+      panel.content.add(
+        addUiText(this, contentWidth, rowY, formatHighscoreDate(entry.bestScoreAt), "meta", {
+          color: colorToHex(UI_THEME.colors.textMuted),
+          align: "right"
+        }).setOrigin(1, 0)
+      );
+      panel.content.add(
+        addUiText(this, 34, rowY + 19, this.resolveOnlineLeaderboardPlayer(entry.displayName, isCurrentPlayer, 22), "meta", {
+          color: colorToHex(isCurrentPlayer ? UI_THEME.colors.textSoft : UI_THEME.colors.textMuted)
+        }).setOrigin(0, 0)
+      );
+    });
+  }
+
+  private resolveOnlineLeaderboardPlayer(value: string, isCurrentPlayer: boolean, maxLength = 18): string {
+    return isCurrentPlayer
+      ? `${this.truncateLabel(value, maxLength)} • you`
+      : this.truncateLabel(value, maxLength);
+  }
+
+  private resolveLeaderboardStatusLabel(snapshot: MenuLeaderboardSnapshot | null): string {
+    if (snapshot === null) {
+      return this.isLeaderboardLoading ? "SYNCING..." : "STANDBY";
+    }
+
+    return snapshot.mode === "online" ? "GLOBAL LIVE" : "LOCAL BACKUP";
+  }
+
+  private resolveLeaderboardStatusColor(snapshot: MenuLeaderboardSnapshot | null): number {
+    if (snapshot === null) {
+      return UI_THEME.colors.textSoft;
+    }
+
+    return snapshot.mode === "online" ? UI_THEME.colors.success : UI_THEME.colors.warning;
+  }
+
+  private resolvePersonalRankHeadline(snapshot: MenuLeaderboardSnapshot): string {
+    if (snapshot.playerProfile?.rank !== null && snapshot.playerProfile?.rank !== undefined) {
+      return `Ваш ранг: #${snapshot.playerProfile.rank}`;
+    }
+
+    if (this.session.rankedEligible) {
+      return "Личный ранг ещё не зафиксирован";
+    }
+
+    return "Войдите через Google для personal rank";
+  }
+
+  private resolvePersonalRankMeta(snapshot: MenuLeaderboardSnapshot): string {
+    if (snapshot.playerProfile?.bestScore !== null && snapshot.playerProfile?.bestWave !== null) {
+      return `${snapshot.playerProfile.bestScore} pts • W${snapshot.playerProfile.bestWave}`;
+    }
+
+    return snapshot.mode === "online" ? "global board online" : "fallback mode";
+  }
+
+  private isCurrentPlayerEntry(snapshot: MenuLeaderboardSnapshot, entry: MenuLeaderboardSnapshot["topEntries"][number]): boolean {
+    return snapshot.playerProfile !== null
+      && snapshot.playerProfile.player.displayName === entry.displayName
+      && snapshot.playerProfile.bestScore === entry.bestScore
+      && snapshot.playerProfile.bestWave === entry.bestWave;
+  }
+
   private populateControlsPanel(panel: UiPanel, panelWidth: number, compact: boolean): void {
     const contentWidth = panelWidth - (compact ? 32 : 40);
     const columnWidth = contentWidth / 3;
@@ -653,6 +946,29 @@ export class MenuScene extends Phaser.Scene {
       })
     );
     fadeScaleIn(this, closeButton.root, { delay: 34, scaleFrom: 0.99, yOffset: 4, duration: UI_THEME.motion.normal });
+  }
+
+  private async refreshLeaderboardSnapshot(): Promise<void> {
+    const requestId = ++this.leaderboardRequestId;
+    this.isLeaderboardLoading = true;
+
+    if (this.leaderboardSnapshot === null) {
+      this.renderContent();
+    }
+
+    try {
+      const snapshot = await getGameAppContext().onlineLeaderboardService.loadMenuLeaderboard(this.session);
+      if (requestId !== this.leaderboardRequestId) {
+        return;
+      }
+
+      this.leaderboardSnapshot = snapshot;
+    } finally {
+      if (requestId === this.leaderboardRequestId) {
+        this.isLeaderboardLoading = false;
+        this.renderContent();
+      }
+    }
   }
 
   private resolveProfileHeadline(): string {
@@ -887,6 +1203,9 @@ export class MenuScene extends Phaser.Scene {
     this.isAuthBusy = false;
     this.isSettingsOpen = false;
     this.resumeMetadata = null;
+    this.leaderboardSnapshot = null;
+    this.isLeaderboardLoading = false;
+    this.leaderboardRequestId = 0;
     this.authMessage = "";
     this.authMessageColor = colorToHex(UI_THEME.colors.textSoft);
   }

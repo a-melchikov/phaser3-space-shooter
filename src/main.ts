@@ -6,6 +6,7 @@ import { setGameAppContext } from "./game/appContext";
 import { createGameConfig } from "./game/config";
 import { BackendLeaderboardClient } from "./game/services/BackendLeaderboardClient";
 import { HttpRankedScoreSubmissionService } from "./game/services/HttpRankedScoreSubmissionService";
+import { OnlineLeaderboardService } from "./game/services/OnlineLeaderboardService";
 import { PracticeScoreStore } from "./game/services/PracticeScoreStore";
 import { ResultsService } from "./game/services/ResultsService";
 import { RunStateStore } from "./game/services/RunStateStore";
@@ -20,14 +21,17 @@ if (!appRoot) {
 const authState = new AuthState();
 const authService = new FirebaseAuthService(authState);
 const leaderboardClient = new BackendLeaderboardClient();
+const practiceScoreStore = new PracticeScoreStore();
 const resultsService = new ResultsService(
-  new PracticeScoreStore(),
+  practiceScoreStore,
   new HttpRankedScoreSubmissionService(authService, leaderboardClient)
 );
+const onlineLeaderboardService = new OnlineLeaderboardService(authService, leaderboardClient, practiceScoreStore);
 const runStateStore = new RunStateStore();
 
 setGameAppContext({
   authService,
+  onlineLeaderboardService,
   resultsService,
   runStateStore
 });
