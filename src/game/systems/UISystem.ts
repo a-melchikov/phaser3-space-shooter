@@ -41,6 +41,7 @@ export class UISystem {
   private readonly powerUpEmptyText: Phaser.GameObjects.Text;
   private readonly powerUpRows: PowerUpRow[] = [];
   private readonly bossBarFill: Phaser.GameObjects.Rectangle;
+  private readonly bossBarMaxWidth: number;
   private readonly bossValueText: Phaser.GameObjects.Text;
   private readonly bannerText: Phaser.GameObjects.Text;
   private readonly pauseOverlay: Phaser.GameObjects.Rectangle;
@@ -186,13 +187,15 @@ export class UISystem {
     this.powerUpPanel.content.add(this.powerUpEmptyText);
     this.createPowerUpRows();
 
+    const bossPanelWidth = Math.min(380, viewportWidth - 80);
+    const bossPanelPadding = 22;
     this.bossPanel = this.trackComponent(
       createGlassPanel(scene, {
         x: viewportCenterX,
         y: 46,
-        width: Math.min(380, viewportWidth - 80),
+        width: bossPanelWidth,
         height: 64,
-        padding: 22,
+        padding: bossPanelPadding,
         depth: UI_THEME.depth.hud + 2,
         fillColor: UI_THEME.colors.panel,
         fillAlpha: 0.72,
@@ -200,11 +203,15 @@ export class UISystem {
         borderColor: UI_THEME.colors.danger
       })
     );
+    const bossBarWidth = bossPanelWidth - bossPanelPadding * 2;
+    const bossBarHeight = 10;
+    const bossBarInset = 2;
+    const bossBarY = 24;
     const bossTrack = scene.add.graphics();
     bossTrack.fillStyle(UI_THEME.colors.surface, 0.92);
-    bossTrack.fillRoundedRect(0, 24, Math.min(312, viewportWidth - 148), 10, 10);
+    bossTrack.fillRoundedRect(0, bossBarY, bossBarWidth, bossBarHeight, bossBarHeight * 0.5);
     bossTrack.lineStyle(1, UI_THEME.colors.danger, 0.16);
-    bossTrack.strokeRoundedRect(0, 24, Math.min(312, viewportWidth - 148), 10, 10);
+    bossTrack.strokeRoundedRect(0, bossBarY, bossBarWidth, bossBarHeight, bossBarHeight * 0.5);
     this.bossPanel.content.add(bossTrack);
 
     this.bossValueText = addUiText(scene, 0, 0, "", "meta", {
@@ -212,8 +219,16 @@ export class UISystem {
     }).setOrigin(0, 0);
     this.bossPanel.content.add(this.bossValueText);
 
+    this.bossBarMaxWidth = bossBarWidth - bossBarInset * 2;
     this.bossBarFill = scene.add
-      .rectangle(0, 29, Math.min(312, viewportWidth - 148), 6, UI_THEME.colors.danger, 1)
+      .rectangle(
+        bossBarInset,
+        bossBarY + bossBarHeight * 0.5,
+        this.bossBarMaxWidth,
+        bossBarHeight - bossBarInset * 2,
+        UI_THEME.colors.danger,
+        1
+      )
       .setOrigin(0, 0.5);
     this.bossPanel.content.add(this.bossBarFill);
     this.bossPanel.root.setVisible(false);
@@ -368,7 +383,7 @@ export class UISystem {
     }
 
     const ratio = Phaser.Math.Clamp(current / max, 0, 1);
-    this.bossBarFill.displayWidth = this.bossBarFill.width * ratio;
+    this.bossBarFill.displayWidth = this.bossBarMaxWidth * ratio;
     this.bossValueText.setText(`Босс • ${Math.ceil(current)} / ${max}`);
   }
 

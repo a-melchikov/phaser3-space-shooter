@@ -156,21 +156,21 @@ export class Player extends Phaser.Physics.Arcade.Image {
     }
 
     if (type === "doubleShot") {
-      this.doubleShotUntil = time + POWER_UP_DURATIONS_MS.doubleShot;
+      this.doubleShotUntil = this.extendPowerUpDuration(this.doubleShotUntil, POWER_UP_DURATIONS_MS.doubleShot, time);
       return;
     }
 
     if (type === "shield") {
-      this.shieldUntil = time + POWER_UP_DURATIONS_MS.shield;
+      this.shieldUntil = this.extendPowerUpDuration(this.shieldUntil, POWER_UP_DURATIONS_MS.shield, time);
       return;
     }
 
     if (type === "damageBoost") {
-      this.damageBoostUntil = time + POWER_UP_DURATIONS_MS.damageBoost;
+      this.damageBoostUntil = this.extendPowerUpDuration(this.damageBoostUntil, POWER_UP_DURATIONS_MS.damageBoost, time);
       return;
     }
 
-    this.supportDroneUntil = time + POWER_UP_DURATIONS_MS.supportDrone;
+    this.supportDroneUntil = this.extendPowerUpDuration(this.supportDroneUntil, POWER_UP_DURATIONS_MS.supportDrone, time);
   }
 
   public isInvulnerable(time: number): boolean {
@@ -314,6 +314,10 @@ export class Player extends Phaser.Physics.Arcade.Image {
         }
       }
     });
+  }
+
+  private extendPowerUpDuration(currentUntil: number, durationMs: number, time: number): number {
+    return Math.max(currentUntil, time) + durationMs;
   }
 
   private fire(time: number, bullets: Phaser.Physics.Arcade.Group): void {
