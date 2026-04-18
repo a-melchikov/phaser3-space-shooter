@@ -162,10 +162,11 @@ export class UiButton {
   private readonly glow: Phaser.GameObjects.Graphics;
   private readonly background: Phaser.GameObjects.Graphics;
   private readonly label: Phaser.GameObjects.Text;
+  private readonly subtitle?: Phaser.GameObjects.Text;
   private readonly hitArea: Phaser.GameObjects.Zone;
   private readonly width: number;
   private readonly height: number;
-  private readonly variant: "primary" | "secondary" | "ghost";
+  private variant: "primary" | "secondary" | "ghost" | "success" | "danger";
   private enabled: boolean;
   private hovered = false;
   private pressed = false;
@@ -178,7 +179,8 @@ export class UiButton {
       width: number;
       height: number;
       label: string;
-      variant?: "primary" | "secondary" | "ghost";
+      subtitle?: string;
+      variant?: "primary" | "secondary" | "ghost" | "success" | "danger";
       enabled?: boolean;
       depth?: number;
       audioSystem?: AudioSystem;
@@ -201,9 +203,23 @@ export class UiButton {
         align: "center"
       })
     ).setOrigin(0.5);
+    this.subtitle = options.subtitle
+      ? configureText(
+        scene.add.text(0, 0, options.subtitle, {
+          fontFamily: UI_THEME.fonts.body,
+          fontSize: "12px",
+          fontStyle: "500",
+          color: colorToHex(UI_THEME.colors.textSoft),
+          align: "center"
+        })
+      ).setOrigin(0.5)
+      : undefined;
     this.hitArea = scene.add.zone(0, 0, options.width, options.height).setRectangleDropZone(options.width, options.height);
 
     this.root.add([this.glow, this.background, this.label, this.hitArea]);
+    if (this.subtitle) {
+      this.root.add(this.subtitle);
+    }
     this.hitArea.setInteractive({ useHandCursor: true });
 
     const audioSystem = options.audioSystem;
@@ -269,6 +285,15 @@ export class UiButton {
     this.label.setText(value);
   }
 
+  public setSubtitle(value: string | null): void {
+    this.subtitle?.setText(value ?? "");
+  }
+
+  public setVariant(value: "primary" | "secondary" | "ghost" | "success" | "danger"): void {
+    this.variant = value;
+    this.render(this.width, this.height, this.variant);
+  }
+
   public setEnabled(value: boolean): void {
     this.enabled = value;
     if (value) {
@@ -303,7 +328,7 @@ export class UiButton {
     this.root.destroy(true);
   }
 
-  private render(width: number, height: number, variant: "primary" | "secondary" | "ghost"): void {
+  private render(width: number, height: number, variant: "primary" | "secondary" | "ghost" | "success" | "danger"): void {
     this.glow.clear();
     this.background.clear();
 
@@ -321,13 +346,20 @@ export class UiButton {
     this.background.fillRoundedRect(-width * 0.5 + 1, -height * 0.5 + 1, width - 2, Math.max(18, height * 0.48), radius);
     this.background.lineStyle(1, palette.border, palette.borderAlpha);
     this.background.strokeRoundedRect(-width * 0.5, -height * 0.5, width, height, radius);
+    const hasSubtitle = Boolean(this.subtitle && this.subtitle.text.length > 0);
+    this.label.setPosition(0, hasSubtitle ? -8 : 0);
     this.label.setColor(colorToHex(palette.text));
     this.label.setAlpha(this.enabled ? 1 : 0.6);
+    if (this.subtitle) {
+      this.subtitle.setPosition(0, 11);
+      this.subtitle.setColor(colorToHex(variant === "ghost" ? UI_THEME.colors.textMuted : UI_THEME.colors.textSoft));
+      this.subtitle.setAlpha(this.enabled ? (variant === "ghost" ? 0.72 : 0.9) : 0.5);
+    }
   }
 }
 
 function resolveButtonPalette(
-  variant: "primary" | "secondary" | "ghost",
+  variant: "primary" | "secondary" | "ghost" | "success" | "danger",
   enabled: boolean,
   hovered: boolean,
   pressed: boolean
@@ -380,6 +412,32 @@ function resolveButtonPalette(
       glowAlpha: hovered ? 0.16 : 0.07,
       text: UI_THEME.colors.text,
       highlightAlpha: hovered ? 0.06 : 0.04
+    };
+  }
+
+  if (variant === "success") {
+    return {
+      fill: hovered ? 0x163f33 : 0x103126,
+      fillAlpha: 0.86 + hoveredBoost - pressedDrop,
+      border: UI_THEME.colors.success,
+      borderAlpha: hovered ? 0.44 : 0.28,
+      glow: UI_THEME.colors.success,
+      glowAlpha: hovered ? 0.2 : 0.09,
+      text: UI_THEME.colors.text,
+      highlightAlpha: hovered ? 0.08 : 0.05
+    };
+  }
+
+  if (variant === "danger") {
+    return {
+      fill: hovered ? 0x4a1d2a : 0x361620,
+      fillAlpha: 0.86 + hoveredBoost - pressedDrop,
+      border: UI_THEME.colors.danger,
+      borderAlpha: hovered ? 0.44 : 0.28,
+      glow: UI_THEME.colors.danger,
+      glowAlpha: hovered ? 0.2 : 0.09,
+      text: UI_THEME.colors.text,
+      highlightAlpha: hovered ? 0.08 : 0.05
     };
   }
 

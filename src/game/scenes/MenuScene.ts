@@ -244,8 +244,8 @@ export class MenuScene extends Phaser.Scene {
     const panelTop = panel.root.y - panelHeight * 0.5;
     const leftX = panel.root.x - panelWidth * 0.5 + innerPadding;
     const actionBaseY = compact
-      ? (hasResume ? panel.root.y + 12 : panel.root.y - 2)
-      : (hasResume ? panel.root.y + 22 : panel.root.y + 6);
+      ? (hasResume ? panel.root.y + 12 : panel.root.y + 8)
+      : (hasResume ? panel.root.y + 22 : panel.root.y + 16);
     const headerTop = 0;
     const nameTop = compact ? 26 : 30;
     const sublineTop = compact ? 58 : 66;
@@ -292,22 +292,14 @@ export class MenuScene extends Phaser.Scene {
       }).setOrigin(0, 0)
     );
 
-    if (hasResume && this.resumeMetadata) {
-      panel.content.add(
-        addUiText(this, 0, bodyTop + (compact ? 52 : 56), this.describeSavedRun(this.resumeMetadata), "meta", {
-          color: colorToHex(UI_THEME.colors.warning),
-          wordWrap: { width: localWidth }
-        }).setOrigin(0, 0)
-      );
-    }
-
     const continueButton = hasResume
       ? this.trackComponent(
         new UiButton(this, {
           x: panel.root.x,
           y: actionBaseY - (compact ? 44 : 52),
           width: actionWidth,
-          height: compact ? 40 : 44,
+          height: compact ? 54 : 58,
+          subtitle: this.resumeMetadata ? this.formatResumeButtonSubtitle(this.resumeMetadata) : undefined,
           label: "Продолжить",
           variant: "primary",
           depth: UI_THEME.depth.menu + 6,
@@ -321,7 +313,7 @@ export class MenuScene extends Phaser.Scene {
     const primaryButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY,
+        y: actionBaseY + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
         height: compact ? 42 : 46,
         label: "Начать игру",
@@ -336,7 +328,7 @@ export class MenuScene extends Phaser.Scene {
     const secondaryButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY + (compact ? 42 : 50),
+        y: actionBaseY + (compact ? 42 : 50) + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
         height: compact ? 36 : 38,
         label: secondaryLabel,
@@ -358,7 +350,7 @@ export class MenuScene extends Phaser.Scene {
     const settingsButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY + (compact ? 82 : 96),
+        y: actionBaseY + (compact ? 82 : 96) + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
         height: 32,
         label: "Настройки звука",
@@ -742,6 +734,10 @@ export class MenuScene extends Phaser.Scene {
       : `wave ${metadata.wave}`;
 
     return `${waveLabel} • score ${metadata.score} • ${savedAtLabel}`;
+  }
+
+  private formatResumeButtonSubtitle(metadata: ResumeMetadata): string {
+    return `Волна ${metadata.wave} • Счёт ${metadata.score}`;
   }
 
   private startGame(mode: "new" | "resume"): void {

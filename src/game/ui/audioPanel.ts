@@ -28,7 +28,8 @@ export class AudioSettingsPanel {
       depth?: number;
     }
   ) {
-    const height = options.subtitle ? 224 : 196;
+    const height = options.subtitle ? 240 : 212;
+    const muteButtonWidth = 154;
     this.panel = createGlassPanel(scene, {
       x: options.x,
       y: options.y,
@@ -50,7 +51,7 @@ export class AudioSettingsPanel {
       color: colorToHex(UI_THEME.colors.text)
     }).setOrigin(0, 0);
     this.panel.content.add(title);
-    cursorY += 30;
+    cursorY += 40;
 
     if (options.subtitle) {
       const subtitle = addUiText(scene, 0, cursorY, options.subtitle, "meta", {
@@ -66,9 +67,9 @@ export class AudioSettingsPanel {
     this.panel.content.add(muteLabel);
 
     this.muteButton = new UiButton(scene, {
-      x: -options.width * 0.5 + 24 + contentWidth - 42,
+      x: -options.width * 0.5 + 24 + contentWidth - 82,
       y: -height * 0.5 + 24 + cursorY + 8,
-      width: 84,
+      width: muteButtonWidth,
       height: 34,
       label: "Вкл",
       variant: "secondary",
@@ -195,6 +196,7 @@ export class AudioSettingsPanel {
 
   public refresh(): void {
     const settings = this.audioSystem.getSettings();
+    this.muteButton.setVariant(settings.masterMuted ? "danger" : "success");
     this.muteButton.setLabel(settings.masterMuted ? "Выкл" : "Вкл");
     this.musicValueText.setText(`${Math.round(settings.musicVolume * 100)}%`);
     this.sfxValueText.setText(`${Math.round(settings.sfxVolume * 100)}%`);
