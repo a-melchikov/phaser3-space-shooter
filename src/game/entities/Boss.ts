@@ -2,6 +2,7 @@ import Phaser from "phaser";
 
 import { BOSS_DEFINITIONS } from "../config/bosses";
 import type { BossId, BossPhaseId, PlayerCombatSnapshot, WavePlan } from "../types/combat";
+import type { SavedBossState } from "../types/runState";
 import { getSpawnLaneX } from "../utils/enemyFactory";
 import { getViewportHeight, getViewportWidth } from "../utils/viewport";
 import { CombatDirector } from "../systems/CombatDirector";
@@ -200,6 +201,33 @@ export class Boss extends Phaser.Physics.Arcade.Image {
     this.clearTint();
     this.beamSweep = undefined;
     this.pendingAttack = undefined;
+  }
+
+  public capturePersistentState(): SavedBossState {
+    return {
+      active: this.active,
+      bossId: this.active ? this.bossId : undefined,
+      health: this.active ? this.health : undefined,
+      maxHealth: this.active ? this.maxHealth : undefined,
+      x: this.active ? this.x : undefined,
+      y: this.active ? this.y : undefined
+    };
+  }
+
+  public restorePersistentState(state: SavedBossState, time: number): void {
+    if (!this.active) {
+      return;
+    }
+
+    this.isEntering = false;
+    this.maxHealth = Math.max(this.maxHealth, state.maxHealth ?? this.maxHealth);
+    this.health = Phaser.Math.Clamp(state.health ?? this.maxHealth, 1, this.maxHealth);
+    this.setPosition(state.x ?? this.x, state.y ?? this.y);
+    this.setVelocity(0, 0);
+    this.pendingAttack = undefined;
+    this.attackReleaseAt = 0;
+    this.nextActionAt = time + 500;
+    this.beamSweep = undefined;
   }
 
   public override destroy(fromScene?: boolean): void {

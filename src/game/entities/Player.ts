@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 
 import { PlayerBullet } from "./PlayerBullet";
+import type { SavedPlayerState, SavedPowerUpState } from "../types/runState";
 import type { ActivePowerUpState } from "../types/game";
 import type { PlayerCombatSnapshot, PowerUpType } from "../types/combat";
 import {
@@ -247,9 +248,72 @@ export class Player extends Phaser.Physics.Arcade.Image {
     return effects;
   }
 
+  public capturePersistentState(time: number): SavedPlayerState {
+    return {
+      health: this.health,
+      lives: this.lives,
+      x: this.x,
+      y: this.y,
+      invulnerableRemainingMs: Math.max(0, this.invulnerableUntil - time),
+      powerUps: this.capturePowerUps(time)
+    };
+  }
+
+  public restorePersistentState(state: SavedPlayerState, time: number): void {
+    this.health = Phaser.Math.Clamp(state.health, 0, this.maxHealth);
+    this.lives = Math.max(0, Math.floor(state.lives));
+    this.setPosition(state.x, state.y);
+    this.setVelocity(0, 0);
+    this.fireReadyAt = time;
+    this.invulnerableUntil = time + Math.max(0, state.invulnerableRemainingMs);
+    this.shieldUntil = 0;
+    this.doubleShotUntil = 0;
+    this.damageBoostUntil = 0;
+    this.supportDroneUntil = 0;
+    this.restorePowerUps(state.powerUps, time);
+    this.updateVisualState(time);
+  }
+
   public override destroy(fromScene?: boolean): void {
     this.shieldRing.destroy();
     super.destroy(fromScene);
+  }
+
+  private capturePowerUps(time: number): SavedPowerUpState[] {
+    return this.getActivePowerUps(time).map((effect) => ({
+      type: effect.type,
+      remainingMs: effect.remainingMs
+    }));
+  }
+
+  private restorePowerUps(powerUps: SavedPowerUpState[], time: number): void {
+    powerUps.forEach((powerUp) => {
+      const remainingMs = Math.max(0, powerUp.remainingMs);
+      if (remainingMs <= 0) {
+        return;
+      }
+
+      switch (powerUp.type) {
+        case "shield":
+          this.shieldUntil = Math.max(this.shieldUntil, time + remainingMs);
+          break;
+        case "doubleShot":
+          this.doubleShotUntil = Math.max(this.doubleShotUntil, time + remainingMs);
+          break;
+        case "damageBoost":
+          this.damageBoostUntil = Math.max(this.damageBoostUntil, time + remainingMs);
+          break;
+        case "supportDrone":
+          this.supportDroneUntil = Math.max(this.supportDroneUntil, time + remainingMs);
+          break;
+        case "heal":
+          break;
+        default: {
+          const exhaustiveCheck: never = powerUp.type;
+          return exhaustiveCheck;
+        }
+      }
+    });
   }
 
   private fire(time: number, bullets: Phaser.Physics.Arcade.Group): void {

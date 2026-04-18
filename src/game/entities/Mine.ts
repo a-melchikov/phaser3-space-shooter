@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 
+import type { SavedMineState } from "../types/runState";
 import { TEXTURE_KEYS } from "../utils/constants";
 import { getViewportHeight, getViewportWidth } from "../utils/viewport";
 
@@ -54,6 +55,32 @@ export class Mine extends Phaser.Physics.Arcade.Image {
     this.clearTint();
     this.setScale(1);
     this.setAlpha(1);
+  }
+
+  public capturePersistentState(time: number): SavedMineState | null {
+    if (!this.active) {
+      return null;
+    }
+
+    return {
+      x: this.x,
+      y: this.y,
+      damage: this.contactDamage,
+      armRemainingMs: Math.max(0, this.armedAt - time),
+      remainingMs: Math.max(0, this.expiresAt - time)
+    };
+  }
+
+  public restorePersistentState(state: SavedMineState, time: number): void {
+    this.spawn(
+      state.x,
+      state.y,
+      time,
+      Math.max(0, state.armRemainingMs),
+      Math.max(1, state.remainingMs),
+      state.damage
+    );
+    this.setPosition(state.x, state.y);
   }
 
   public override update(time: number, delta: number): void {

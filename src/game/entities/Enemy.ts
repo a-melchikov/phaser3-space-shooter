@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import { getProgressionStageConfig } from "../config/combat";
 import { ENEMY_DEFINITIONS, getEnemyStageHealthMultiplier } from "../config/enemies";
 import type { EnemyArchetypeId, EnemyRole, EnemyVariant, PlannedEnemySpawn, ProgressionStage } from "../types/combat";
+import type { SavedEnemyState } from "../types/runState";
 import { randomBetween } from "../utils/helpers";
 import { getViewportHeight, getViewportWidth } from "../utils/viewport";
 import { CombatDirector } from "../systems/CombatDirector";
@@ -72,6 +73,13 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
   private director?: CombatDirector;
   private telegraphs?: TelegraphSystem;
   private spawnSource: "wave" | "boss" = "wave";
+  private plannedSpawn: PlannedEnemySpawn = {
+    archetype: "basic",
+    variant: "normal",
+    role: "common",
+    lane: 0,
+    source: "wave"
+  };
   private baseX = 0;
   private anchorX = 0;
   private moveDirection = 1;
@@ -119,6 +127,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     this.archetypeId = options.spawn.archetype;
     this.variant = options.spawn.variant;
     this.role = options.spawn.role;
+    this.plannedSpawn = { ...options.spawn };
     this.stage = options.stage;
     this.currentWave = options.wave;
     this.spawnedAt = options.time;
@@ -214,6 +223,36 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     this.setScale(1);
     this.clearTelegraph();
     this.clearTint();
+  }
+
+  public capturePersistentState(): SavedEnemyState | null {
+    if (!this.active) {
+      return null;
+    }
+
+    return {
+      spawn: { ...this.plannedSpawn },
+      health: this.health,
+      maxHealth: this.maxHealth,
+      x: this.x,
+      y: this.y
+    };
+  }
+
+  public restorePersistentState(
+    state: SavedEnemyState,
+    options: Omit<EnemySpawnOptions, "spawn" | "x" | "y">
+  ): void {
+    this.spawn({
+      ...options,
+      spawn: state.spawn,
+      x: state.x,
+      y: state.y
+    });
+
+    this.maxHealth = Math.max(this.maxHealth, state.maxHealth);
+    this.health = Phaser.Math.Clamp(state.health, 1, this.maxHealth);
+    this.setPosition(state.x, state.y);
   }
 
   public override update(): void {

@@ -9,7 +9,8 @@ export const STORAGE_KEYS = {
   legacyHighscores: "spaceShooterHighscoresV1",
   legacyPracticeScores: "spaceShooterHighscoresV2",
   practiceScores: "spaceShooterPracticeScoresV1",
-  audioSettings: "spaceShooterAudioSettingsV1"
+  audioSettings: "spaceShooterAudioSettingsV1",
+  runState: "spaceShooterRunStateV1"
 } as const;
 
 export const TEXTURE_KEYS = {

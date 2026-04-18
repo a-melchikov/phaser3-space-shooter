@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 
+import { getGameAppContext } from "../appContext";
 import { BOSS_EVENTS, Boss } from "../entities/Boss";
 import { ENEMY_EVENTS, Enemy } from "../entities/Enemy";
 import { EnemyBullet } from "../entities/EnemyBullet";
@@ -15,11 +16,24 @@ import { CombatDirector } from "../systems/CombatDirector";
 import { TelegraphSystem } from "../systems/TelegraphSystem";
 import { UISystem } from "../systems/UISystem";
 import { WaveManager } from "../systems/WaveManager";
+import { RunAutosaveController } from "../services/RunAutosaveController";
 import type { EnemyType, GameStartPayload, SessionPresentation, WaveManagerCallbacks } from "../types/game";
 import type { PowerUpType, WavePlan } from "../types/combat";
+import type {
+  RunPhase,
+  RunSnapshot,
+  SavedBossState,
+  SavedEnemyState,
+  SavedMineState,
+  SavedRunState,
+  SavedWaveProgressState,
+  SavedWorldPowerUpState
+} from "../types/runState";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import {
+  isBossWave,
+  isEliteWave,
   getAvailablePowerUpTypes,
   POWER_UP_DROP_CHANCE,
   POWER_UP_LABELS,
@@ -67,6 +81,9 @@ export class GameScene extends Phaser.Scene {
   private activeBoss?: Boss;
   private gameOverTimeoutId?: number;
   private runSession!: SessionPresentation;
+  private autosaveController?: RunAutosaveController;
+  private pendingSavedRun?: SavedRunState;
+  private isRestoringRun = false;
 
   public constructor() {
     super(SCENE_KEYS.GAME);
@@ -80,7 +97,9 @@ export class GameScene extends Phaser.Scene {
     this.score = 0;
     this.activeBoss = undefined;
     this.gameOverTimeoutId = undefined;
-    this.runSession = data.session;
+    this.runSession = data.savedRun?.run.session ?? data.session;
+    this.pendingSavedRun = data.savedRun;
+    this.isRestoringRun = false;
   }
 
   public create(): void {
@@ -150,6 +169,9 @@ export class GameScene extends Phaser.Scene {
         this.uiSystem.setBossHealth(0, 0);
         this.audioSystem.playSfx(SFX_KEYS.WAVE_START);
         this.audioSystem.playMusic(plan.kind === "boss" ? MUSIC_KEYS.BOSS : MUSIC_KEYS.GAMEPLAY);
+        if (!this.isRestoringRun) {
+          this.requestAutosave(true);
+        }
 
         if (plan.kind !== "normal") {
           this.uiSystem.showBanner(`${plan.bannerText} • ${plan.subtitle}`);
@@ -171,7 +193,17 @@ export class GameScene extends Phaser.Scene {
     };
 
     this.waveManager = new WaveManager(this, callbacks);
-    this.waveManager.startRun();
+    this.autosaveController = new RunAutosaveController(
+      getGameAppContext().runStateStore,
+      () => this.captureRunState()
+    );
+    this.autosaveController.start();
+
+    if (this.pendingSavedRun) {
+      this.restoreRunState(this.pendingSavedRun);
+    } else {
+      this.waveManager.startRun();
+    }
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
@@ -213,6 +245,101 @@ export class GameScene extends Phaser.Scene {
 
     this.waveManager.update();
     this.uiSystem.refresh(time);
+  }
+
+  private restoreRunState(savedRun: SavedRunState): void {
+    const snapshot = savedRun.run;
+    const waveProgress = this.isWaveProgressRestorable(snapshot.waveProgress, snapshot.wave)
+      ? snapshot.waveProgress
+      : null;
+
+    this.score = snapshot.score;
+    this.runSession = snapshot.session;
+    this.uiSystem.setScore(this.score);
+    this.uiSystem.setSessionStatus(this.runSession);
+    this.isRestoringRun = true;
+
+    this.player.resetForRun(this.time.now);
+    this.player.restorePersistentState(
+      {
+        ...snapshot.player,
+        x: Phaser.Math.Clamp(
+          snapshot.player.x,
+          this.player.displayWidth * 0.5,
+          getViewportWidth(this) - this.player.displayWidth * 0.5
+        ),
+        y: Phaser.Math.Clamp(
+          snapshot.player.y,
+          this.player.displayHeight * 0.5,
+          getViewportHeight(this) - this.player.displayHeight * 0.5
+        )
+      },
+      this.time.now
+    );
+
+    if (waveProgress) {
+      this.waveManager.restoreProgress(waveProgress);
+      this.restoreWaveEntities(waveProgress);
+      this.uiSystem.setWave(waveProgress.plan.wave);
+      this.uiSystem.setBossHealth(this.activeBoss?.health ?? 0, this.activeBoss?.maxHealth ?? 0);
+    } else {
+      this.waveManager.startRun(snapshot.wave, true);
+    }
+
+    this.uiSystem.setPowerUps(this.player.getActivePowerUps(this.time.now));
+    this.uiSystem.showBanner("Продолжение run");
+    this.pendingSavedRun = undefined;
+    this.isRestoringRun = false;
+    this.requestAutosave(true);
+  }
+
+  private captureRunState(): RunSnapshot | null {
+    if (this.isFinishing || this.isShuttingDown || !this.player?.active || !this.waveManager) {
+      return null;
+    }
+
+    const wave = Math.max(1, this.waveManager.getCheckpointWave());
+    const waveProgress = this.captureWaveProgress(wave);
+    const bossState = waveProgress?.boss ?? this.captureBossState();
+
+    return {
+      wave,
+      score: this.score,
+      phase: this.resolveRunPhase(),
+      waveKind: this.resolveWaveKind(wave),
+      player: this.player.capturePersistentState(this.time.now),
+      boss: bossState,
+      waveProgress,
+      session: this.runSession
+    };
+  }
+
+  private requestAutosave(immediate = false): void {
+    this.autosaveController?.requestSave(immediate);
+  }
+
+  private clearRunState(): void {
+    getGameAppContext().runStateStore.clear();
+  }
+
+  private resolveRunPhase(): RunPhase {
+    if (this.isPaused) {
+      return "paused";
+    }
+
+    if (this.isTransitioning) {
+      return "transition";
+    }
+
+    return "playing";
+  }
+
+  private resolveWaveKind(wave: number): WavePlan["kind"] {
+    if (isBossWave(wave)) {
+      return "boss";
+    }
+
+    return isEliteWave(wave) ? "elite" : "normal";
   }
 
   private createBackground(): void {
@@ -297,6 +424,158 @@ export class GameScene extends Phaser.Scene {
     ];
   }
 
+  private captureWaveProgress(checkpointWave: number): SavedWaveProgressState | null {
+    const progress = this.waveManager.getCurrentWave() === checkpointWave
+      ? this.waveManager.captureProgress()
+      : null;
+
+    if (!progress) {
+      return null;
+    }
+
+    progress.activeEnemies = this.captureActiveEnemies();
+    progress.activePowerUps = this.captureActivePowerUps();
+    progress.activeMines = this.captureActiveMines();
+    progress.boss = this.captureBossState();
+    return progress;
+  }
+
+  private captureActiveEnemies(): SavedEnemyState[] {
+    const enemies: SavedEnemyState[] = [];
+    this.iterateGroup(this.enemies, (gameObject) => {
+      const enemy = gameObject as Enemy;
+      const snapshot = enemy.capturePersistentState();
+      if (snapshot) {
+        enemies.push(snapshot);
+      }
+      return true;
+    });
+    return enemies;
+  }
+
+  private captureActivePowerUps(): SavedWorldPowerUpState[] {
+    const powerUps: SavedWorldPowerUpState[] = [];
+    this.iterateGroup(this.powerUps, (gameObject) => {
+      const powerUp = gameObject as PowerUp;
+      const snapshot = powerUp.capturePersistentState(this.time.now);
+      if (snapshot) {
+        powerUps.push(snapshot);
+      }
+      return true;
+    });
+    return powerUps;
+  }
+
+  private captureActiveMines(): SavedMineState[] {
+    const mines: SavedMineState[] = [];
+    this.iterateGroup(this.mines, (gameObject) => {
+      const mine = gameObject as Mine;
+      const snapshot = mine.capturePersistentState(this.time.now);
+      if (snapshot) {
+        mines.push(snapshot);
+      }
+      return true;
+    });
+    return mines;
+  }
+
+  private captureBossState(): SavedBossState {
+    return this.activeBoss?.capturePersistentState() ?? { active: false };
+  }
+
+  private restoreWaveEntities(progress: SavedWaveProgressState): void {
+    this.restoreActiveEnemies(progress.activeEnemies, progress.plan);
+    this.restoreActiveMines(progress.activeMines);
+    this.restoreActivePowerUps(progress.activePowerUps);
+
+    if (progress.plan.kind === "boss" && progress.boss.active) {
+      this.restoreBoss(progress.plan, progress.boss);
+    }
+  }
+
+  private restoreActiveEnemies(enemies: SavedEnemyState[], plan: WavePlan): void {
+    enemies.forEach((enemyState) => {
+      const enemy = this.enemies.get() as Enemy | null;
+      if (!enemy) {
+        return;
+      }
+
+      enemy.restorePersistentState(enemyState, {
+        wave: plan.wave,
+        stage: plan.stage,
+        time: this.time.now,
+        director: this.combatDirector,
+        telegraphs: this.telegraphSystem
+      });
+      this.bindEnemyAudioEvents(enemy);
+    });
+  }
+
+  private restoreActiveMines(mines: SavedMineState[]): void {
+    mines.forEach((mineState) => {
+      const mine = this.mines.get() as Mine | null;
+      if (!mine) {
+        return;
+      }
+
+      mine.restorePersistentState(mineState, this.time.now);
+    });
+  }
+
+  private restoreActivePowerUps(powerUps: SavedWorldPowerUpState[]): void {
+    powerUps.forEach((powerUpState) => {
+      const powerUp = this.powerUps.get() as PowerUp | null;
+      if (!powerUp) {
+        return;
+      }
+
+      powerUp.restorePersistentState(powerUpState, this.time.now);
+    });
+  }
+
+  private restoreBoss(plan: WavePlan, bossState: SavedBossState): void {
+    const boss = this.bosses.get() as Boss | null;
+    if (!boss) {
+      return;
+    }
+
+    this.bindBossAudioEvents(boss);
+    boss.spawn({
+      plan,
+      director: this.combatDirector,
+      telegraphs: this.telegraphSystem
+    });
+    boss.restorePersistentState(bossState, this.time.now);
+    this.activeBoss = boss;
+  }
+
+  private isWaveProgressRestorable(
+    progress: SavedWaveProgressState | null,
+    expectedWave: number
+  ): progress is SavedWaveProgressState {
+    if (!progress) {
+      return false;
+    }
+
+    if (progress.plan.wave !== expectedWave) {
+      return false;
+    }
+
+    if (progress.nextBatchIndex > progress.plan.spawnBatches.length) {
+      return false;
+    }
+
+    if (progress.plan.kind !== "boss" && progress.boss.active) {
+      return false;
+    }
+
+    if (progress.plan.kind === "boss" && progress.boss.active && !progress.boss.bossId) {
+      return false;
+    }
+
+    return true;
+  }
+
   private spawnBoss(plan: WavePlan): void {
     const boss = this.bosses.get() as Boss | null;
     if (!boss) {
@@ -376,6 +655,8 @@ export class GameScene extends Phaser.Scene {
     if (result.lostLife) {
       this.spawnBurst(this.player.x, this.player.y, UI_COLORS.cyan, 14);
     }
+
+    this.requestAutosave();
   }
 
   private handlePlayerHitsEnemy(enemy: Enemy): void {
@@ -390,7 +671,10 @@ export class GameScene extends Phaser.Scene {
 
     if (result.gameOver) {
       this.finishRun();
+      return;
     }
+
+    this.requestAutosave();
   }
 
   private handlePlayerHitsBoss(boss: Boss): void {
@@ -404,7 +688,10 @@ export class GameScene extends Phaser.Scene {
 
     if (result.gameOver) {
       this.finishRun();
+      return;
     }
+
+    this.requestAutosave();
   }
 
   private handlePlayerHitsMine(mine: Mine): void {
@@ -424,7 +711,10 @@ export class GameScene extends Phaser.Scene {
 
     if (result.gameOver) {
       this.finishRun();
+      return;
     }
+
+    this.requestAutosave();
   }
 
   private handlePlayerCollectsPowerUp(powerUp: PowerUp): void {
@@ -439,6 +729,7 @@ export class GameScene extends Phaser.Scene {
     this.audioSystem.playSfx(SFX_KEYS.POWERUP_PICKUP);
     this.uiSystem.showBanner(`Бонус: ${label}`);
     this.spawnImpact(this.player.x, this.player.y, UI_COLORS.success);
+    this.requestAutosave();
   }
 
   private destroyEnemy(enemy: Enemy, awardScore: boolean): void {
@@ -505,6 +796,7 @@ export class GameScene extends Phaser.Scene {
   private addScore(amount: number): void {
     this.score += amount;
     this.uiSystem.setScore(this.score);
+    this.requestAutosave();
   }
 
   private clearProjectiles(): void {
@@ -550,6 +842,7 @@ export class GameScene extends Phaser.Scene {
     this.isFinishing = true;
     this.isTransitioning = true;
     this.forceResumeRuntimeState();
+    this.clearRunState();
     this.telegraphSystem.clear();
     this.clearProjectiles();
     this.clearMines();
@@ -584,6 +877,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.forceResumeRuntimeState();
+    this.clearRunState();
     this.audioSystem.stopAllSfx();
     this.scene.start(SCENE_KEYS.MENU);
   }
@@ -625,11 +919,13 @@ export class GameScene extends Phaser.Scene {
     if (this.isPaused) {
       this.physics?.world?.pause();
       this.time.timeScale = 0;
+      this.requestAutosave(true);
       return;
     }
 
     this.time.timeScale = 1;
     this.physics?.world?.resume();
+    this.requestAutosave();
   }
 
   private spawnImpact(x: number, y: number, tint: number): void {
@@ -783,6 +1079,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.waveManager?.shutdown();
+    this.autosaveController?.destroy();
     this.collisionManager?.destroy();
     this.uiSystem?.destroy();
     this.telegraphSystem?.destroy();
@@ -842,5 +1139,7 @@ export class GameScene extends Phaser.Scene {
     this.powerUps = undefined as unknown as Phaser.Physics.Arcade.Group;
     this.mines = undefined as unknown as Phaser.Physics.Arcade.Group;
     this.player = undefined as unknown as Player;
+    this.autosaveController = undefined;
+    this.pendingSavedRun = undefined;
   }
 }

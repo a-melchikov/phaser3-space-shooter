@@ -16,6 +16,7 @@ import type {
   WavePlan,
   WaveThemeId
 } from "./combat";
+import type { SavedRunState } from "./runState";
 
 export type EnemyType = EnemyArchetypeId;
 export type {
@@ -56,8 +57,9 @@ export interface SessionPresentation {
 }
 
 export interface GameStartPayload {
-  source?: "menu" | "gameover";
+  source?: "menu" | "gameover" | "resume";
   session: SessionPresentation;
+  savedRun?: SavedRunState;
 }
 
 export interface GameOverPayload {

@@ -8,6 +8,7 @@ import { BackendLeaderboardClient } from "./game/services/BackendLeaderboardClie
 import { HttpRankedScoreSubmissionService } from "./game/services/HttpRankedScoreSubmissionService";
 import { PracticeScoreStore } from "./game/services/PracticeScoreStore";
 import { ResultsService } from "./game/services/ResultsService";
+import { RunStateStore } from "./game/services/RunStateStore";
 import { AudioSystem } from "./game/systems/AudioSystem";
 
 const appRoot = document.getElementById("app");
@@ -23,10 +24,12 @@ const resultsService = new ResultsService(
   new PracticeScoreStore(),
   new HttpRankedScoreSubmissionService(authService, leaderboardClient)
 );
+const runStateStore = new RunStateStore();
 
 setGameAppContext({
   authService,
-  resultsService
+  resultsService,
+  runStateStore
 });
 
 void authService.initialize();

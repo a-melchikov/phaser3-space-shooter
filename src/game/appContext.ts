@@ -1,9 +1,11 @@
 import type { AuthService } from "../auth/AuthService";
 import type { ResultsService } from "./services/ResultsService";
+import type { RunStateStore } from "./services/RunStateStore";
 
 export interface GameAppContext {
   authService: AuthService;
   resultsService: ResultsService;
+  runStateStore: RunStateStore;
 }
 
 let gameAppContext: GameAppContext | null = null;

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 
 import type { PowerUpType } from "../types/combat";
+import type { SavedWorldPowerUpState } from "../types/runState";
 import { POWER_UP_TEXTURES } from "../config/combat";
 import { getViewportHeight } from "../utils/viewport";
 
@@ -35,6 +36,25 @@ export class PowerUp extends Phaser.Physics.Arcade.Image {
   public deactivate(): void {
     this.disableBody(true, true);
     this.setVelocity(0, 0);
+  }
+
+  public capturePersistentState(time: number): SavedWorldPowerUpState | null {
+    if (!this.active) {
+      return null;
+    }
+
+    return {
+      type: this.powerUpType,
+      x: this.x,
+      y: this.y,
+      remainingMs: Math.max(0, this.expiresAt - time)
+    };
+  }
+
+  public restorePersistentState(state: SavedWorldPowerUpState, time: number): void {
+    this.spawn(state.type, state.x, state.y, time);
+    this.expiresAt = time + Math.max(0, state.remainingMs);
+    this.setPosition(state.x, state.y);
   }
 
   public override update(time: number, delta: number): void {

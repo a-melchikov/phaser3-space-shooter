@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import { WAVE_BATCH_RETRY_MS } from "../config/combat";
 import type { WaveManagerCallbacks } from "../types/game";
 import type { SpawnBatch, WavePlan } from "../types/combat";
+import type { SavedWaveProgressState } from "../types/runState";
 import { WavePlanner } from "./WavePlanner";
 
 export class WaveManager {
@@ -21,12 +22,19 @@ export class WaveManager {
     private readonly planner = new WavePlanner()
   ) {}
 
-  public startRun(): void {
+  public startRun(startWave = 1, skipInitialTransition = false): void {
     this.shutdown();
     this.stopped = false;
-    this.currentWave = 1;
+    this.currentWave = Math.max(1, Math.floor(startWave));
 
-    const firstPlan = this.planner.createPlan(1);
+    const firstPlan = this.planner.createPlan(this.currentWave);
+    if (skipInitialTransition) {
+      this.transitioning = false;
+      this.callbacks.onTransitionStateChange(false);
+      this.startWave(firstPlan);
+      return;
+    }
+
     this.beginTransition(firstPlan, () => {
       this.startWave(firstPlan);
     });
@@ -63,12 +71,43 @@ export class WaveManager {
     return this.currentPlan;
   }
 
+  public captureProgress(): SavedWaveProgressState | null {
+    if (!this.currentPlan) {
+      return null;
+    }
+
+    return {
+      plan: this.currentPlan,
+      nextBatchIndex: this.batchIndex,
+      pendingBatch: this.pendingBatch ?? null,
+      nextSpawnDelayMs: Math.max(0, this.batchEvent?.getRemaining() ?? 0),
+      activeEnemies: [],
+      activePowerUps: [],
+      activeMines: [],
+      boss: {
+        active: false
+      }
+    };
+  }
+
   public isBossWave(): boolean {
     return this.currentPlan?.kind === "boss";
   }
 
   public isTransitioning(): boolean {
     return this.transitioning;
+  }
+
+  public getCheckpointWave(): number {
+    if (!this.currentPlan) {
+      return this.currentWave;
+    }
+
+    if (this.transitioning || this.isCurrentWaveCleared()) {
+      return this.currentPlan.wave + 1;
+    }
+
+    return this.currentPlan.wave;
   }
 
   public shutdown(): void {
@@ -81,6 +120,27 @@ export class WaveManager {
     this.currentPlan = undefined;
     this.transitioning = false;
     this.stopped = true;
+  }
+
+  public restoreProgress(progress: SavedWaveProgressState): void {
+    this.shutdown();
+    this.stopped = false;
+    this.transitioning = false;
+    this.currentWave = progress.plan.wave;
+    this.currentPlan = progress.plan;
+    this.batchIndex = Math.min(progress.nextBatchIndex, progress.plan.spawnBatches.length);
+    this.pendingBatch = progress.pendingBatch ?? undefined;
+    this.callbacks.onTransitionStateChange(false);
+    this.callbacks.onWaveChanged(progress.plan);
+
+    if (progress.plan.kind === "boss") {
+      return;
+    }
+
+    const hasRemainingBatches = this.pendingBatch !== undefined || this.batchIndex < progress.plan.spawnBatches.length;
+    if (hasRemainingBatches) {
+      this.scheduleBatch(progress.nextSpawnDelayMs);
+    }
   }
 
   private startWave(plan: WavePlan): void {
@@ -160,5 +220,30 @@ export class WaveManager {
       this.callbacks.onTransitionStateChange(false);
       onComplete();
     });
+  }
+
+  private isCurrentWaveCleared(): boolean {
+    if (!this.currentPlan) {
+      return false;
+    }
+
+    if (this.currentPlan.kind === "boss") {
+      return (
+        !this.callbacks.isBossAlive() &&
+        !this.callbacks.hasActiveEnemies() &&
+        !this.callbacks.hasActiveEnemyProjectiles() &&
+        !this.callbacks.hasActiveHazards()
+      );
+    }
+
+    const hasRemainingBatches =
+      this.pendingBatch !== undefined || this.batchIndex < this.currentPlan.spawnBatches.length;
+
+    return (
+      !hasRemainingBatches &&
+      !this.callbacks.hasActiveEnemies() &&
+      !this.callbacks.hasActiveEnemyProjectiles() &&
+      !this.callbacks.hasActiveHazards()
+    );
   }
 }

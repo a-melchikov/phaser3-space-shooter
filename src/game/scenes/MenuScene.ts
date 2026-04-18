@@ -5,6 +5,7 @@ import { getGameAppContext } from "../appContext";
 import { AudioSystem } from "../systems/AudioSystem";
 import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import type { GameStartPayload, PracticeScoreEntry } from "../types/game";
+import type { ResumeMetadata } from "../types/runState";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, formatHighscoreDate } from "../utils/helpers";
@@ -36,6 +37,7 @@ export class MenuScene extends Phaser.Scene {
   private authMessage = "";
   private authMessageColor = colorToHex(UI_THEME.colors.textSoft);
   private isSettingsOpen = false;
+  private resumeMetadata: ResumeMetadata | null = null;
 
   public constructor() {
     super(SCENE_KEYS.MENU);
@@ -43,6 +45,7 @@ export class MenuScene extends Phaser.Scene {
 
   public create(): void {
     this.session = getGameAppContext().authService.getSession();
+    this.resumeMetadata = getGameAppContext().runStateStore.getResumeMetadata();
     this.audioSystem = AudioSystem.getInstance(this);
     this.audioSystem.stopAllSfx();
     this.audioSystem.playMusic(MUSIC_KEYS.MENU);
@@ -60,6 +63,7 @@ export class MenuScene extends Phaser.Scene {
     this.authUnsubscribe = getGameAppContext().authService.subscribe((session) => {
       this.session = session;
       this.isAuthBusy = false;
+      this.resumeMetadata = getGameAppContext().runStateStore.getResumeMetadata();
       this.renderContent();
     });
 
@@ -83,7 +87,7 @@ export class MenuScene extends Phaser.Scene {
     ) {
       this.handleFirstInteraction();
       this.audioSystem.playSfx(SFX_KEYS.UI_CLICK);
-      this.startGame();
+      this.startGame(this.resumeMetadata ? "resume" : "new");
     }
   }
 
@@ -115,7 +119,9 @@ export class MenuScene extends Phaser.Scene {
     const practiceScores = getGameAppContext().resultsService.getPracticeScores();
     const googleAvailable = getGameAppContext().authService.isGoogleLoginAvailable();
     const panelWidth = Math.min(viewportWidth - 48, compact ? 468 : 586);
-    const actionPanelHeight = compact ? 286 : 320;
+    const actionPanelHeight = compact
+      ? (this.resumeMetadata ? 336 : 286)
+      : (this.resumeMetadata ? 372 : 320);
     const leaderboardHeight = compact ? 178 : 226;
     const footerHeight = compact ? 62 : 76;
     const stackGap = compact ? 10 : 12;
@@ -234,9 +240,12 @@ export class MenuScene extends Phaser.Scene {
     const localWidth = contentWidth;
     const actionWidth = Math.min(panelWidth - innerPadding * 2, compact ? 270 : 308);
     const secondaryLabel = this.resolveSecondaryActionLabel(googleAvailable);
+    const hasResume = this.resumeMetadata !== null;
     const panelTop = panel.root.y - panelHeight * 0.5;
     const leftX = panel.root.x - panelWidth * 0.5 + innerPadding;
-    const actionBaseY = compact ? panel.root.y - 2 : panel.root.y + 6;
+    const actionBaseY = compact
+      ? (hasResume ? panel.root.y + 12 : panel.root.y - 2)
+      : (hasResume ? panel.root.y + 22 : panel.root.y + 6);
     const headerTop = 0;
     const nameTop = compact ? 26 : 30;
     const sublineTop = compact ? 58 : 66;
@@ -283,6 +292,32 @@ export class MenuScene extends Phaser.Scene {
       }).setOrigin(0, 0)
     );
 
+    if (hasResume && this.resumeMetadata) {
+      panel.content.add(
+        addUiText(this, 0, bodyTop + (compact ? 52 : 56), this.describeSavedRun(this.resumeMetadata), "meta", {
+          color: colorToHex(UI_THEME.colors.warning),
+          wordWrap: { width: localWidth }
+        }).setOrigin(0, 0)
+      );
+    }
+
+    const continueButton = hasResume
+      ? this.trackComponent(
+        new UiButton(this, {
+          x: panel.root.x,
+          y: actionBaseY - (compact ? 44 : 52),
+          width: actionWidth,
+          height: compact ? 40 : 44,
+          label: "Продолжить",
+          variant: "primary",
+          depth: UI_THEME.depth.menu + 6,
+          audioSystem: this.audioSystem,
+          enabled: !this.isAuthBusy,
+          onClick: () => this.startGame("resume")
+        })
+      )
+      : undefined;
+
     const primaryButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
@@ -294,14 +329,14 @@ export class MenuScene extends Phaser.Scene {
         depth: UI_THEME.depth.menu + 6,
         audioSystem: this.audioSystem,
         enabled: !this.isAuthBusy,
-        onClick: () => this.startGame()
+        onClick: () => this.startGame("new")
       })
     );
 
     const secondaryButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY + (compact ? 42 : 48),
+        y: actionBaseY + (compact ? 42 : 50),
         width: actionWidth,
         height: compact ? 36 : 38,
         label: secondaryLabel,
@@ -323,7 +358,7 @@ export class MenuScene extends Phaser.Scene {
     const settingsButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY + (compact ? 80 : 92),
+        y: actionBaseY + (compact ? 82 : 96),
         width: actionWidth,
         height: 32,
         label: "Настройки звука",
@@ -341,9 +376,16 @@ export class MenuScene extends Phaser.Scene {
       })
     );
 
-    fadeScaleIn(this, primaryButton.root, { delay: 90, scaleFrom: 0.99, yOffset: 5 });
-    fadeScaleIn(this, secondaryButton.root, { delay: 110, scaleFrom: 0.995, yOffset: 5 });
-    fadeScaleIn(this, settingsButton.root, { delay: 130, scaleFrom: 0.995, yOffset: 4 });
+    if (hasResume) {
+      primaryButton.setLabel("Новая игра");
+    }
+
+    if (continueButton) {
+      fadeScaleIn(this, continueButton.root, { delay: 90, scaleFrom: 0.99, yOffset: 5 });
+    }
+    fadeScaleIn(this, primaryButton.root, { delay: continueButton ? 108 : 90, scaleFrom: 0.99, yOffset: 5 });
+    fadeScaleIn(this, secondaryButton.root, { delay: continueButton ? 126 : 110, scaleFrom: 0.995, yOffset: 5 });
+    fadeScaleIn(this, settingsButton.root, { delay: continueButton ? 144 : 130, scaleFrom: 0.995, yOffset: 4 });
 
     const helper = this.trackObject(
       addUiText(this, leftX + contentWidth * 0.5, panelTop + panelHeight - (compact ? 14 : 18), this.resolveActionHint(googleAvailable), "meta", {
@@ -685,15 +727,47 @@ export class MenuScene extends Phaser.Scene {
     return `${value.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
   }
 
-  private startGame(): void {
+  private describeSavedRun(metadata: ResumeMetadata): string {
+    const savedAt = new Date(metadata.savedAt);
+    const savedAtLabel = Number.isNaN(savedAt.getTime())
+      ? "recently"
+      : savedAt.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    const waveLabel = metadata.bossActive || metadata.waveKind === "boss"
+      ? `boss wave ${metadata.wave}`
+      : `wave ${metadata.wave}`;
+
+    return `${waveLabel} • score ${metadata.score} • ${savedAtLabel}`;
+  }
+
+  private startGame(mode: "new" | "resume"): void {
     if (this.isStarting || this.isAuthBusy) {
       return;
     }
 
     this.isStarting = true;
+    const runStateStore = getGameAppContext().runStateStore;
+
+    if (mode === "new") {
+      runStateStore.clear();
+    }
+
+    const savedRun = mode === "resume" ? runStateStore.load() : null;
+    if (mode === "resume" && !savedRun) {
+      this.isStarting = false;
+      this.resumeMetadata = null;
+      this.renderContent();
+      return;
+    }
+
     const payload: GameStartPayload = {
-      source: "menu",
-      session: buildSessionPresentation(this.session)
+      source: mode === "resume" ? "resume" : "menu",
+      session: savedRun?.run.session ?? buildSessionPresentation(this.session),
+      savedRun: savedRun ?? undefined
     };
 
     this.scene.start(SCENE_KEYS.GAME, payload);
@@ -816,6 +890,7 @@ export class MenuScene extends Phaser.Scene {
     this.isStarting = false;
     this.isAuthBusy = false;
     this.isSettingsOpen = false;
+    this.resumeMetadata = null;
     this.authMessage = "";
     this.authMessageColor = colorToHex(UI_THEME.colors.textSoft);
   }

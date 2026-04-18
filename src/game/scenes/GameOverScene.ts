@@ -52,6 +52,7 @@ export class GameOverScene extends Phaser.Scene {
     this.audioSystem = AudioSystem.getInstance(this);
     this.audioSystem.stopAllSfx();
     this.audioSystem.playMusic(MUSIC_KEYS.GAME_OVER);
+    getGameAppContext().runStateStore.clear();
 
     const session = getGameAppContext().authService.getSession();
     const result: CompletedRunResult = {
@@ -294,6 +295,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.restartRequested = true;
     this.audioSystem.unlock();
+    getGameAppContext().runStateStore.clear();
 
     const payload: GameStartPayload = {
       source: "gameover",
