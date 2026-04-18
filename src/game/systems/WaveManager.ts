@@ -49,7 +49,6 @@ export class WaveManager {
       if (
         !this.callbacks.isBossAlive() &&
         !this.callbacks.hasActiveEnemies() &&
-        !this.callbacks.hasActiveEnemyProjectiles() &&
         !this.callbacks.hasActiveHazards()
       ) {
         this.advanceWave();
@@ -58,7 +57,7 @@ export class WaveManager {
     }
 
     const hasRemainingBatches = this.pendingBatch !== undefined || this.batchIndex < this.currentPlan.spawnBatches.length;
-    if (!hasRemainingBatches && !this.callbacks.hasActiveEnemies() && !this.callbacks.hasActiveEnemyProjectiles() && !this.callbacks.hasActiveHazards()) {
+    if (!hasRemainingBatches && !this.callbacks.hasActiveEnemies() && !this.callbacks.hasActiveHazards()) {
       this.advanceWave();
     }
   }
@@ -233,7 +232,6 @@ export class WaveManager {
       return (
         !this.callbacks.isBossAlive() &&
         !this.callbacks.hasActiveEnemies() &&
-        !this.callbacks.hasActiveEnemyProjectiles() &&
         !this.callbacks.hasActiveHazards()
       );
     }
@@ -244,7 +242,6 @@ export class WaveManager {
     return (
       !hasRemainingBatches &&
       !this.callbacks.hasActiveEnemies() &&
-      !this.callbacks.hasActiveEnemyProjectiles() &&
       !this.callbacks.hasActiveHazards()
     );
   }
