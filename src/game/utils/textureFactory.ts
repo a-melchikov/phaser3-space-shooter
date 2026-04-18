@@ -38,27 +38,95 @@ function generatePowerOrb(
 export function generateTextures(scene: Phaser.Scene): void {
   generateTexture(scene, TEXTURE_KEYS.player, 64, 72, (graphics) => {
     graphics.clear();
+
+    graphics.fillStyle(0x6ef2ff, 0.12);
+    graphics.fillEllipse(32, 34, 38, 52);
+
+    graphics.lineStyle(2, 0x6ef2ff, 0.32);
+    graphics.beginPath();
+    graphics.moveTo(32, 8);
+    graphics.lineTo(49, 54);
+    graphics.lineTo(32, 46);
+    graphics.lineTo(15, 54);
+    graphics.closePath();
+    graphics.strokePath();
+
+    graphics.fillStyle(0x4d79c9, 1);
+    graphics.beginPath();
+    graphics.moveTo(32, 4);
+    graphics.lineTo(39, 18);
+    graphics.lineTo(44, 42);
+    graphics.lineTo(32, 58);
+    graphics.lineTo(20, 42);
+    graphics.lineTo(25, 18);
+    graphics.closePath();
+    graphics.fillPath();
+
     graphics.fillStyle(0x77a8ff, 1);
     graphics.beginPath();
-    graphics.moveTo(32, 6);
-    graphics.lineTo(58, 60);
-    graphics.lineTo(32, 44);
-    graphics.lineTo(6, 60);
+    graphics.moveTo(32, 8);
+    graphics.lineTo(47, 26);
+    graphics.lineTo(54, 54);
+    graphics.lineTo(42, 49);
+    graphics.lineTo(36, 58);
+    graphics.lineTo(28, 58);
+    graphics.lineTo(22, 49);
+    graphics.lineTo(10, 54);
+    graphics.lineTo(17, 26);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.fillStyle(0x5f8df0, 1);
+    graphics.beginPath();
+    graphics.moveTo(13, 50);
+    graphics.lineTo(24, 36);
+    graphics.lineTo(27, 46);
+    graphics.lineTo(22, 55);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.beginPath();
+    graphics.moveTo(51, 50);
+    graphics.lineTo(40, 36);
+    graphics.lineTo(37, 46);
+    graphics.lineTo(42, 55);
     graphics.closePath();
     graphics.fillPath();
 
     graphics.fillStyle(0xdaf8ff, 1);
     graphics.beginPath();
-    graphics.moveTo(32, 12);
-    graphics.lineTo(42, 30);
-    graphics.lineTo(32, 38);
-    graphics.lineTo(22, 30);
+    graphics.moveTo(32, 14);
+    graphics.lineTo(38, 26);
+    graphics.lineTo(36, 38);
+    graphics.lineTo(32, 44);
+    graphics.lineTo(28, 38);
+    graphics.lineTo(26, 26);
     graphics.closePath();
     graphics.fillPath();
 
+    graphics.fillStyle(0x0f1d3f, 0.95);
+    graphics.beginPath();
+    graphics.moveTo(32, 17);
+    graphics.lineTo(35.5, 25);
+    graphics.lineTo(34.5, 35);
+    graphics.lineTo(32, 39);
+    graphics.lineTo(29.5, 35);
+    graphics.lineTo(28.5, 25);
+    graphics.closePath();
+    graphics.fillPath();
+
+    graphics.lineStyle(1.5, 0xdaf8ff, 0.6);
+    graphics.lineBetween(32, 11, 32, 52);
+    graphics.lineBetween(24, 34, 40, 34);
+
+    graphics.fillStyle(0xffd76c, 0.9);
+    graphics.fillCircle(32, 49, 2.2);
+
     graphics.fillStyle(0x6ef2ff, 0.85);
-    graphics.fillRect(14, 52, 10, 8);
-    graphics.fillRect(40, 52, 10, 8);
+    graphics.fillRoundedRect(17, 53, 10, 7, 2);
+    graphics.fillRoundedRect(37, 53, 10, 7, 2);
+    graphics.fillStyle(0xdaf8ff, 0.55);
+    graphics.fillRoundedRect(20, 56, 4, 4, 1.5);
+    graphics.fillRoundedRect(40, 56, 4, 4, 1.5);
   });
 
   generateTexture(scene, TEXTURE_KEYS.shieldRing, 96, 96, (graphics) => {

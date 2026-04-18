@@ -72,13 +72,16 @@ export class UISystem {
     const sidePanelPadding = 22;
     const leftPanelX = 148;
     const rightPanelX = viewportWidth - 148;
+    const leftPanelHeight = 124;
+    const rightPanelHeight = 164;
+    const rightPanelY = panelTop + (rightPanelHeight - leftPanelHeight) * 0.5;
 
     this.leftPanel = this.trackComponent(
       createGlassPanel(scene, {
         x: leftPanelX,
         y: panelTop,
         width: sidePanelWidth,
-        height: 124,
+        height: leftPanelHeight,
         padding: sidePanelPadding,
         depth: UI_THEME.depth.hud,
         fillColor: UI_THEME.colors.panelStrong,
@@ -120,9 +123,9 @@ export class UISystem {
     this.rightPanel = this.trackComponent(
       createGlassPanel(scene, {
         x: rightPanelX,
-        y: panelTop,
+        y: rightPanelY,
         width: sidePanelWidth,
-        height: 164,
+        height: rightPanelHeight,
         padding: sidePanelPadding,
         depth: UI_THEME.depth.hud,
         fillColor: UI_THEME.colors.panelStrong,
