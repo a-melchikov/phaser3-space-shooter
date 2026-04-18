@@ -155,9 +155,9 @@ export class GameOverScene extends Phaser.Scene {
     const leaderboardPanel = this.trackComponent(
       createGlassPanel(this, {
         x: viewportCenterX,
-        y: viewportHeight * (compact ? 0.71 : 0.68),
+        y: viewportHeight * (compact ? 0.705 : 0.675),
         width: cardWidth,
-        height: compact ? 198 : 210,
+        height: compact ? 224 : 238,
         depth: UI_THEME.depth.menu + 2,
         fillColor: UI_THEME.colors.panel,
         fillAlpha: 0.8,
@@ -171,7 +171,7 @@ export class GameOverScene extends Phaser.Scene {
     const restartButton = this.trackComponent(
       new UiButton(this, {
         x: viewportCenterX - 106,
-        y: viewportHeight - (compact ? 54 : 48),
+        y: viewportHeight - (compact ? 66 : 60),
         width: 184,
         height: 44,
         label: "Играть снова",
@@ -184,7 +184,7 @@ export class GameOverScene extends Phaser.Scene {
     const menuButton = this.trackComponent(
       new UiButton(this, {
         x: viewportCenterX + 106,
-        y: viewportHeight - (compact ? 54 : 48),
+        y: viewportHeight - (compact ? 66 : 60),
         width: 184,
         height: 40,
         label: "Главное меню",
@@ -244,18 +244,18 @@ export class GameOverScene extends Phaser.Scene {
     }).setOrigin(0, 0));
     panel.content.add(addUiText(this, 0, 30, "Последние лучшие матчи этой установки", "meta").setOrigin(0, 0));
 
-    scores.slice(0, 4).forEach((entry, index) => {
-      const rowY = 72 + index * 32;
+    scores.slice(0, 5).forEach((entry, index) => {
+      const rowY = 68 + index * 30;
       const row = this.add.container(0, rowY);
       const divider = this.add.graphics();
       divider.lineStyle(1, UI_THEME.colors.line, index === 0 ? 0.16 : 0.08);
-      divider.lineBetween(0, 26, contentWidth, 26);
+      divider.lineBetween(0, 24, contentWidth, 24);
 
       const rank = addUiText(this, 0, 0, `#${index + 1}`, "label", {
         color: colorToHex(index === 0 ? UI_THEME.colors.warning : UI_THEME.colors.cyan)
       }).setOrigin(0, 0);
       const score = addUiText(this, 40, 0, `${entry.score} • волна ${entry.wave}`, "body", {
-        fontSize: "15px"
+        fontSize: "14px"
       }).setOrigin(0, 0);
       const meta = addUiText(this, contentWidth, 0, `${this.truncateLabel(entry.playerLabel, 16)} • ${formatHighscoreDate(entry.date)}`, "meta", {
         align: "right"
