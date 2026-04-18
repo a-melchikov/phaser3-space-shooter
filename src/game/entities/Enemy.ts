@@ -521,7 +521,18 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
       tint: definition.color,
       scaleX: 1.18,
       scaleY: 1.28,
-      angle: angle + Math.PI * 0.5
+      angle: angle + Math.PI * 0.5,
+      homing: definition.homingDurationMs && definition.homingTurnRateRadPerSec
+        ? {
+            durationMs: definition.homingDurationMs,
+            turnRateRadPerSec: definition.homingTurnRateRadPerSec,
+            targetOffsetY: -10,
+            getTarget: () => {
+              const snapshot = this.director?.getPlayerSnapshot();
+              return snapshot ? { x: snapshot.x, y: snapshot.y } : null;
+            }
+          }
+        : undefined
     });
 
     if (bullet) {

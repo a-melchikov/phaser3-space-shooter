@@ -90,7 +90,9 @@ export const ENEMY_DEFINITIONS: Record<EnemyArchetypeId, EnemyDefinition> = {
     preferredY: 118,
     strafeSpeed: 84,
     telegraphDurationMs: 700,
-    predictiveLeadMs: 0
+    predictiveLeadMs: 0,
+    homingDurationMs: 650,
+    homingTurnRateRadPerSec: 2.2
   },
   kamikaze: {
     id: "kamikaze",

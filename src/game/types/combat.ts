@@ -118,6 +118,13 @@ export interface FireProjectileOptions {
   scaleX?: number;
   scaleY?: number;
   angle?: number;
+  homing?: {
+    durationMs: number;
+    turnRateRadPerSec: number;
+    targetOffsetX?: number;
+    targetOffsetY?: number;
+    getTarget: () => VectorLike | null;
+  };
 }
 
 export interface EnemyDefinition {
@@ -158,6 +165,8 @@ export interface EnemyDefinition {
   burstSpreadRadians?: number;
   spreadShotCount?: number;
   spreadRadians?: number;
+  homingDurationMs?: number;
+  homingTurnRateRadPerSec?: number;
 }
 
 export interface BossDefinition {
