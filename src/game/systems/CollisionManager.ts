@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import { Boss } from "../entities/Boss";
 import { Enemy } from "../entities/Enemy";
 import { EnemyBullet } from "../entities/EnemyBullet";
+import { Mine } from "../entities/Mine";
 import { Player } from "../entities/Player";
 import { PlayerBullet } from "../entities/PlayerBullet";
 import { PowerUp } from "../entities/PowerUp";
@@ -14,13 +15,17 @@ interface CollisionManagerOptions {
   enemyBullets: Phaser.Physics.Arcade.Group;
   enemies: Phaser.Physics.Arcade.Group;
   bosses: Phaser.Physics.Arcade.Group;
+  mines: Phaser.Physics.Arcade.Group;
   powerUps: Phaser.Physics.Arcade.Group;
   canResolveCombat: () => boolean;
   canResolvePlayerDamage: () => boolean;
   onPlayerBulletHitsEnemy: (bullet: PlayerBullet, enemy: Enemy) => void;
   onPlayerBulletHitsBoss: (bullet: PlayerBullet, boss: Boss) => void;
+  onPlayerBulletHitsMine: (bullet: PlayerBullet, mine: Mine) => void;
   onEnemyBulletHitsPlayer: (bullet: EnemyBullet) => void;
   onPlayerHitsEnemy: (enemy: Enemy) => void;
+  onPlayerHitsBoss: (boss: Boss) => void;
+  onPlayerHitsMine: (mine: Mine) => void;
   onPlayerCollectsPowerUp: (powerUp: PowerUp) => void;
 }
 
@@ -53,6 +58,17 @@ export class CollisionManager {
         }
         options.onPlayerBulletHitsBoss(bullet, boss);
       }),
+      scene.physics.add.overlap(options.playerBullets, options.mines, (left, right) => {
+        if (!options.canResolveCombat()) {
+          return;
+        }
+        const bullet = this.pickObject(left, right, PlayerBullet);
+        const mine = this.pickObject(left, right, Mine);
+        if (!bullet || !mine) {
+          return;
+        }
+        options.onPlayerBulletHitsMine(bullet, mine);
+      }),
       scene.physics.add.overlap(options.enemyBullets, options.player, (left, right) => {
         if (!options.canResolvePlayerDamage()) {
           return;
@@ -72,6 +88,26 @@ export class CollisionManager {
           return;
         }
         options.onPlayerHitsEnemy(enemy);
+      }),
+      scene.physics.add.overlap(options.player, options.bosses, (left, right) => {
+        if (!options.canResolvePlayerDamage()) {
+          return;
+        }
+        const boss = this.pickObject(left, right, Boss);
+        if (!boss) {
+          return;
+        }
+        options.onPlayerHitsBoss(boss);
+      }),
+      scene.physics.add.overlap(options.player, options.mines, (left, right) => {
+        if (!options.canResolvePlayerDamage()) {
+          return;
+        }
+        const mine = this.pickObject(left, right, Mine);
+        if (!mine) {
+          return;
+        }
+        options.onPlayerHitsMine(mine);
       }),
       scene.physics.add.overlap(options.player, options.powerUps, (left, right) => {
         const powerUp = this.pickObject(left, right, PowerUp);

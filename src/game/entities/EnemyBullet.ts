@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 
+import type { FireProjectileOptions } from "../types/combat";
 import { TEXTURE_KEYS } from "../utils/constants";
 import { getViewportHeight, getViewportWidth } from "../utils/viewport";
 
@@ -20,15 +21,21 @@ export class EnemyBullet extends Phaser.Physics.Arcade.Image {
     this.setDepth(8);
   }
 
-  public fire(x: number, y: number, velocityX: number, velocityY: number, damage: number): void {
-    this.damage = damage;
+  public fire(x: number, y: number, options: FireProjectileOptions): void {
+    this.damage = options.damage;
     this.enableBody(true, x, y, true, true);
-    this.setVelocity(velocityX, velocityY);
+    this.setVelocity(options.velocityX, options.velocityY);
+    this.setTint(options.tint ?? 0xffffff);
+    this.setScale(options.scaleX ?? 1, options.scaleY ?? 1);
+    this.setRotation(options.angle ?? 0);
   }
 
   public deactivate(): void {
     this.disableBody(true, true);
     this.setVelocity(0, 0);
+    this.clearTint();
+    this.setScale(1, 1);
+    this.setRotation(0);
   }
 
   public override update(): void {

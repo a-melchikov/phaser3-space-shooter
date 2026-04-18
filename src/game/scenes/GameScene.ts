@@ -1,30 +1,37 @@
-﻿import Phaser from "phaser";
+import Phaser from "phaser";
 
-import { Boss, BOSS_EVENTS } from "../entities/Boss";
-import { Enemy, ENEMY_EVENTS } from "../entities/Enemy";
+import { BOSS_EVENTS, Boss } from "../entities/Boss";
+import { ENEMY_EVENTS, Enemy } from "../entities/Enemy";
 import { EnemyBullet } from "../entities/EnemyBullet";
+import { Mine } from "../entities/Mine";
 import { Player, PLAYER_EVENTS, type PlayerControls } from "../entities/Player";
 import { PlayerBullet } from "../entities/PlayerBullet";
 import { PowerUp } from "../entities/PowerUp";
+import { SupportDrone } from "../entities/SupportDrone";
 import { AudioSystem } from "../systems/AudioSystem";
 import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import { CollisionManager } from "../systems/CollisionManager";
+import { CombatDirector } from "../systems/CombatDirector";
+import { TelegraphSystem } from "../systems/TelegraphSystem";
 import { UISystem } from "../systems/UISystem";
 import { WaveManager } from "../systems/WaveManager";
-import type { EnemyType, GameStartPayload, PowerUpType, SessionPresentation, WaveManagerCallbacks } from "../types/game";
+import type { EnemyType, GameStartPayload, SessionPresentation, WaveManagerCallbacks } from "../types/game";
+import type { PowerUpType, WavePlan } from "../types/combat";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import {
-  CAMERA_SHAKE_LIGHT,
-  CAMERA_SHAKE_STRONG,
-  ENEMY_CONFIGS,
+  getAvailablePowerUpTypes,
   POWER_UP_DROP_CHANCE,
   POWER_UP_LABELS,
-  SCORE_VALUES,
+  SCORE_VALUES
+} from "../config/combat";
+import { ENEMY_DEFINITIONS } from "../config/enemies";
+import {
+  CAMERA_SHAKE_LIGHT,
+  CAMERA_SHAKE_STRONG,
   TEXTURE_KEYS,
   UI_COLORS
 } from "../utils/constants";
-import { getEnemySpawnX, getEnemySpawnY } from "../utils/enemyFactory";
 import { chance, pickRandom, randomBetween } from "../utils/helpers";
 import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
@@ -33,16 +40,20 @@ export class GameScene extends Phaser.Scene {
   private backgroundOverlay?: Phaser.GameObjects.Rectangle;
 
   private player!: Player;
+  private supportDrone!: SupportDrone;
   private audioSystem!: AudioSystem;
   private uiSystem!: UISystem;
   private waveManager!: WaveManager;
   private collisionManager!: CollisionManager;
+  private telegraphSystem!: TelegraphSystem;
+  private combatDirector!: CombatDirector;
 
   private playerBullets!: Phaser.Physics.Arcade.Group;
   private enemyBullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private bosses!: Phaser.Physics.Arcade.Group;
   private powerUps!: Phaser.Physics.Arcade.Group;
+  private mines!: Phaser.Physics.Arcade.Group;
 
   private readonly trackedEnemies = new WeakSet<Enemy>();
   private readonly trackedBosses = new WeakSet<Boss>();
@@ -89,6 +100,17 @@ export class GameScene extends Phaser.Scene {
     this.createPlayer();
     this.createInput();
 
+    this.telegraphSystem = new TelegraphSystem(this);
+    this.combatDirector = new CombatDirector({
+      scene: this,
+      enemies: this.enemies,
+      enemyBullets: this.enemyBullets,
+      mines: this.mines,
+      getPlayerSnapshot: () => this.player.getCombatSnapshot(),
+      telegraphs: this.telegraphSystem,
+      onEnemySpawn: (enemy) => this.bindEnemyAudioEvents(enemy)
+    });
+
     this.uiSystem = new UISystem(this, this.audioSystem, {
       onPauseResume: () => this.togglePause(),
       onPauseExitToMenu: () => this.exitToMainMenu()
@@ -107,34 +129,44 @@ export class GameScene extends Phaser.Scene {
       enemyBullets: this.enemyBullets,
       enemies: this.enemies,
       bosses: this.bosses,
+      mines: this.mines,
       powerUps: this.powerUps,
       canResolveCombat: () => !this.isPaused && !this.isTransitioning && !this.isFinishing,
       canResolvePlayerDamage: () => !this.isPaused && !this.isTransitioning && !this.isFinishing,
       onPlayerBulletHitsEnemy: (bullet, enemy) => this.handlePlayerBulletHitsEnemy(bullet, enemy),
       onPlayerBulletHitsBoss: (bullet, boss) => this.handlePlayerBulletHitsBoss(bullet, boss),
+      onPlayerBulletHitsMine: (bullet, mine) => this.handlePlayerBulletHitsMine(bullet, mine),
       onEnemyBulletHitsPlayer: (bullet) => this.handleEnemyBulletHitsPlayer(bullet),
       onPlayerHitsEnemy: (enemy) => this.handlePlayerHitsEnemy(enemy),
+      onPlayerHitsBoss: (boss) => this.handlePlayerHitsBoss(boss),
+      onPlayerHitsMine: (mine) => this.handlePlayerHitsMine(mine),
       onPlayerCollectsPowerUp: (powerUp) => this.handlePlayerCollectsPowerUp(powerUp)
     });
 
     const callbacks: WaveManagerCallbacks = {
-      onWaveChanged: (wave, bossWave) => {
-        this.uiSystem.setWave(wave);
+      onWaveChanged: (plan) => {
+        this.combatDirector.setWaveContext(plan);
+        this.uiSystem.setWave(plan.wave);
+        this.uiSystem.setBossHealth(0, 0);
         this.audioSystem.playSfx(SFX_KEYS.WAVE_START);
-        this.audioSystem.playMusic(bossWave ? MUSIC_KEYS.BOSS : MUSIC_KEYS.GAMEPLAY);
+        this.audioSystem.playMusic(plan.kind === "boss" ? MUSIC_KEYS.BOSS : MUSIC_KEYS.GAMEPLAY);
 
-        if (bossWave) {
-          this.uiSystem.showBanner(`Волна ${wave} • босс`);
+        if (plan.kind !== "normal") {
+          this.uiSystem.showBanner(`${plan.bannerText} • ${plan.subtitle}`);
         }
       },
       onTransitionStateChange: (active) => {
         this.isTransitioning = active;
+        if (active) {
+          this.telegraphSystem.clear();
+        }
       },
       onBanner: (text) => this.uiSystem.showBanner(text),
-      spawnEnemy: (type) => this.spawnEnemy(type),
-      spawnBoss: (wave) => this.spawnBoss(wave),
+      spawnBatch: (plan, batch) => this.combatDirector.spawnPlannedBatch(plan, batch),
+      spawnBoss: (plan) => this.spawnBoss(plan),
       hasActiveEnemies: () => this.enemies.countActive(true) > 0,
-      hasActiveEnemyProjectiles: () => this.enemyBullets.countActive(true) > 0,
+      hasActiveEnemyProjectiles: () => this.combatDirector.hasActiveEnemyProjectiles(),
+      hasActiveHazards: () => this.combatDirector.hasActiveHazards(),
       isBossAlive: () => Boolean(this.activeBoss?.active)
     };
 
@@ -142,11 +174,10 @@ export class GameScene extends Phaser.Scene {
     this.waveManager.startRun();
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
-
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
   }
 
-  public override update(time: number, delta: number): void {
+  public override update(time: number, _delta: number): void {
     this.background?.update(time);
 
     if (
@@ -164,20 +195,23 @@ export class GameScene extends Phaser.Scene {
       this.player.updateState(time, this.controls, this.playerBullets);
     }
 
+    const snapshot = this.player.getCombatSnapshot();
+    this.supportDrone.updateState(time, this.player, this.playerBullets, this.enemies, this.bosses);
+
     this.enemies.children.iterate((gameObject) => {
       const enemy = gameObject as Enemy;
-      if (enemy.active) {
-        enemy.updateState(time, this.player.x, this.enemyBullets);
+      if (enemy?.active) {
+        enemy.updateState(time, snapshot);
       }
       return true;
     });
 
-    this.activeBoss?.updateState();
+    this.activeBoss?.updateState(time, snapshot);
     if (this.activeBoss?.active) {
       this.uiSystem.setBossHealth(this.activeBoss.health, this.activeBoss.maxHealth);
     }
 
-    this.waveManager.update(time, delta);
+    this.waveManager.update();
     this.uiSystem.refresh(time);
   }
 
@@ -198,19 +232,19 @@ export class GameScene extends Phaser.Scene {
   private createGroups(): void {
     this.playerBullets = this.physics.add.group({
       classType: PlayerBullet,
-      maxSize: 60,
+      maxSize: 96,
       runChildUpdate: true
     });
 
     this.enemyBullets = this.physics.add.group({
       classType: EnemyBullet,
-      maxSize: 80,
+      maxSize: 128,
       runChildUpdate: true
     });
 
     this.enemies = this.physics.add.group({
       classType: Enemy,
-      maxSize: 40,
+      maxSize: 48,
       runChildUpdate: true
     });
 
@@ -222,7 +256,13 @@ export class GameScene extends Phaser.Scene {
 
     this.powerUps = this.physics.add.group({
       classType: PowerUp,
-      maxSize: 12,
+      maxSize: 14,
+      runChildUpdate: true
+    });
+
+    this.mines = this.physics.add.group({
+      classType: Mine,
+      maxSize: 8,
       runChildUpdate: true
     });
   }
@@ -231,6 +271,7 @@ export class GameScene extends Phaser.Scene {
     this.player = new Player(this);
     this.player.resetForRun(this.time.now);
     this.player.on(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
+    this.supportDrone = new SupportDrone(this);
   }
 
   private createInput(): void {
@@ -256,20 +297,7 @@ export class GameScene extends Phaser.Scene {
     ];
   }
 
-  private spawnEnemy(type: EnemyType): void {
-    const enemy = this.enemies.get() as Enemy | null;
-    if (!enemy) {
-      return;
-    }
-
-    this.bindEnemyAudioEvents(enemy);
-
-    const x = getEnemySpawnX(getViewportWidth(this), type === "heavy");
-    const y = getEnemySpawnY();
-    enemy.spawn(type, this.waveManager.getCurrentWave(), x, y, this.time.now);
-  }
-
-  private spawnBoss(wave: number): void {
+  private spawnBoss(plan: WavePlan): void {
     const boss = this.bosses.get() as Boss | null;
     if (!boss) {
       return;
@@ -277,7 +305,11 @@ export class GameScene extends Phaser.Scene {
 
     this.bindBossAudioEvents(boss);
     this.clearProjectiles();
-    boss.spawn(wave, this.enemyBullets);
+    boss.spawn({
+      plan,
+      director: this.combatDirector,
+      telegraphs: this.telegraphSystem
+    });
     this.activeBoss = boss;
     this.uiSystem.setBossHealth(boss.health, boss.maxHealth);
   }
@@ -300,13 +332,25 @@ export class GameScene extends Phaser.Scene {
     this.spawnImpact(boss.x, boss.y + boss.displayHeight * 0.2, UI_COLORS.gold);
     this.cameras.main.shake(110, CAMERA_SHAKE_LIGHT);
 
-    if (!boss.takeDamage(1)) {
+    const result = boss.takeDamage(bullet.damage);
+    if (!result.destroyed) {
       this.audioSystem.playSfx(SFX_KEYS.BOSS_HIT);
       this.uiSystem.setBossHealth(boss.health, boss.maxHealth);
       return;
     }
 
     this.destroyBoss(boss);
+  }
+
+  private handlePlayerBulletHitsMine(bullet: PlayerBullet, mine: Mine): void {
+    bullet.deactivate();
+    if (!mine.takeDamage()) {
+      return;
+    }
+
+    this.addScore(SCORE_VALUES.mineDestroy);
+    this.audioSystem.playSfx(SFX_KEYS.ENEMY_HIT);
+    this.spawnBurst(mine.x, mine.y, UI_COLORS.gold, 6);
   }
 
   private handleEnemyBulletHitsPlayer(bullet: EnemyBullet): void {
@@ -349,6 +393,40 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private handlePlayerHitsBoss(boss: Boss): void {
+    const result = this.player.takeDamage(boss.contactDamage, this.time.now);
+    if (result.blocked) {
+      return;
+    }
+
+    this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
+    this.cameras.main.shake(160, CAMERA_SHAKE_LIGHT);
+
+    if (result.gameOver) {
+      this.finishRun();
+    }
+  }
+
+  private handlePlayerHitsMine(mine: Mine): void {
+    if (!mine.isArmed(this.time.now)) {
+      return;
+    }
+
+    const result = this.player.takeDamage(mine.contactDamage, this.time.now);
+    if (result.blocked) {
+      return;
+    }
+
+    mine.deactivate();
+    this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
+    this.spawnBurst(this.player.x, this.player.y, UI_COLORS.danger, 8);
+    this.cameras.main.shake(140, CAMERA_SHAKE_LIGHT);
+
+    if (result.gameOver) {
+      this.finishRun();
+    }
+  }
+
   private handlePlayerCollectsPowerUp(powerUp: PowerUp): void {
     if (!powerUp.active) {
       return;
@@ -371,18 +449,16 @@ export class GameScene extends Phaser.Scene {
     enemy.deactivate();
 
     if (awardScore) {
-      this.addScore(ENEMY_CONFIGS[enemyType].score);
-      this.tryDropPowerUp(enemyType, x, y);
+      this.addScore(enemy.scoreValue);
+      if (!enemy.isBossAdd()) {
+        this.tryDropPowerUp(enemyType, x, y);
+      }
     }
 
-    this.spawnBurst(
-      x,
-      y,
-      enemyType === "heavy" ? UI_COLORS.gold : UI_COLORS.danger,
-      enemyType === "heavy" ? 14 : 8
-    );
+    const color = ENEMY_DEFINITIONS[enemyType].color;
+    this.spawnBurst(x, y, color, enemyType === "tank" ? 16 : enemyType === "heavy" ? 14 : 8);
 
-    if (enemyType === "heavy") {
+    if (enemyType === "heavy" || enemyType === "tank") {
       this.cameras.main.shake(160, CAMERA_SHAKE_STRONG);
     }
 
@@ -405,7 +481,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryDropPowerUp(source: EnemyType, x: number, y: number): void {
-    if (!chance(POWER_UP_DROP_CHANCE[source])) {
+    const dropBonus = this.waveManager.getCurrentPlan()?.dropBonus ?? 0;
+    const probability = Math.min(0.8, POWER_UP_DROP_CHANCE[source] + dropBonus);
+
+    if (!chance(probability)) {
       return;
     }
 
@@ -418,8 +497,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const types: PowerUpType[] = ["heal", "doubleShot", "shield"];
-    powerUp.spawn(pickRandom(types), x, y, this.time.now);
+    const wave = this.waveManager?.getCurrentWave() ?? 1;
+    const types = getAvailablePowerUpTypes(wave);
+    powerUp.spawn(pickRandom(types as PowerUpType[]), x, y, this.time.now);
   }
 
   private addScore(amount: number): void {
@@ -452,6 +532,16 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private clearMines(): void {
+    this.iterateGroup(this.mines, (gameObject) => {
+      const mine = gameObject as Mine;
+      if (mine.active) {
+        mine.deactivate();
+      }
+      return true;
+    });
+  }
+
   private finishRun(): void {
     if (this.isFinishing) {
       return;
@@ -460,8 +550,11 @@ export class GameScene extends Phaser.Scene {
     this.isFinishing = true;
     this.isTransitioning = true;
     this.forceResumeRuntimeState();
+    this.telegraphSystem.clear();
     this.clearProjectiles();
+    this.clearMines();
     this.waveManager.shutdown();
+    this.combatDirector.clearWaveContext();
     this.stopCombatMotion();
     this.audioSystem.stopMusic();
     this.audioSystem.stopAllSfx();
@@ -692,12 +785,15 @@ export class GameScene extends Phaser.Scene {
     this.waveManager?.shutdown();
     this.collisionManager?.destroy();
     this.uiSystem?.destroy();
+    this.telegraphSystem?.destroy();
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
 
     this.clearProjectiles();
+    this.clearMines();
     this.destroyGroupMembers(this.enemies);
     this.destroyGroupMembers(this.bosses);
     this.destroyGroupMembers(this.powerUps);
+    this.destroyGroupMembers(this.mines);
     this.destroyGroupMembers(this.playerBullets);
     this.destroyGroupMembers(this.enemyBullets);
 
@@ -729,6 +825,7 @@ export class GameScene extends Phaser.Scene {
 
     this.player?.off(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
     this.player?.destroy();
+    this.supportDrone?.destroy();
     this.activeBoss = undefined;
     this.background?.destroy();
     this.background = undefined;
@@ -743,7 +840,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = undefined as unknown as Phaser.Physics.Arcade.Group;
     this.bosses = undefined as unknown as Phaser.Physics.Arcade.Group;
     this.powerUps = undefined as unknown as Phaser.Physics.Arcade.Group;
+    this.mines = undefined as unknown as Phaser.Physics.Arcade.Group;
     this.player = undefined as unknown as Player;
   }
 }
-

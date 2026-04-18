@@ -2,7 +2,7 @@ import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
 import type { ActivePowerUpState, SessionPresentation } from "../types/game";
-import { POWER_UP_TEXTURES } from "../utils/constants";
+import { POWER_UP_TEXTURES } from "../config/combat";
 import { getViewportCenterX, getViewportCenterY, getViewportHeight, getViewportWidth } from "../utils/viewport";
 import { AudioSystem } from "./AudioSystem";
 import { AudioSettingsPanel } from "../ui/audioPanel";
@@ -54,7 +54,6 @@ export class UISystem {
   private bannerTween?: Phaser.Tweens.Tween;
   private score = 0;
   private wave = 1;
-  private powerUpSignature = "";
   private pauseVisible = false;
   private pauseSettingsVisible = false;
 
@@ -161,9 +160,9 @@ export class UISystem {
     this.powerUpPanel = this.trackComponent(
       createGlassPanel(scene, {
         x: rightPanelX,
-        y: viewportHeight - 64,
+        y: viewportHeight - 88,
         width: sidePanelWidth,
-        height: 92,
+        height: 136,
         padding: sidePanelPadding,
         depth: UI_THEME.depth.hud,
         fillColor: UI_THEME.colors.panelStrong,
@@ -370,12 +369,6 @@ export class UISystem {
   }
 
   public setPowerUps(effects: ActivePowerUpState[]): void {
-    const nextSignature = effects.map((effect) => effect.type).join("|");
-    if (nextSignature === this.powerUpSignature) {
-      return;
-    }
-
-    this.powerUpSignature = nextSignature;
     this.powerUpEmptyText.setVisible(effects.length === 0);
 
     this.powerUpRows.forEach((row, index) => {
@@ -390,7 +383,7 @@ export class UISystem {
       }
 
       row.icon.setTexture(POWER_UP_TEXTURES[effect.type]);
-      row.label.setText(effect.label);
+      row.label.setText(`${effect.label} • ${Math.max(1, Math.ceil(effect.remainingMs / 1000))}с`);
     });
   }
 
@@ -525,8 +518,8 @@ export class UISystem {
   }
 
   private createPowerUpRows(): void {
-    for (let index = 0; index < 2; index += 1) {
-      const y = 30 + index * 24;
+    for (let index = 0; index < 4; index += 1) {
+      const y = 28 + index * 22;
       const icon = this.trackObject(
         this.scene.add.image(8, y + 6, POWER_UP_TEXTURES.heal)
           .setScale(0.55)

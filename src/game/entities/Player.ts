@@ -1,13 +1,14 @@
 import Phaser from "phaser";
 
 import { PlayerBullet } from "./PlayerBullet";
-import type { ActivePowerUpState, PowerUpType } from "../types/game";
+import type { ActivePowerUpState } from "../types/game";
+import type { PlayerCombatSnapshot, PowerUpType } from "../types/combat";
 import {
   PLAYER_CONFIG,
   POWER_UP_DURATIONS_MS,
-  POWER_UP_LABELS,
-  TEXTURE_KEYS
-} from "../utils/constants";
+  POWER_UP_LABELS
+} from "../config/combat";
+import { TEXTURE_KEYS } from "../utils/constants";
 import { getPlayerSpawnX, getPlayerSpawnY } from "../utils/viewport";
 
 export const PLAYER_EVENTS = {
@@ -42,6 +43,8 @@ export class Player extends Phaser.Physics.Arcade.Image {
   private invulnerableUntil = 0;
   private shieldUntil = 0;
   private doubleShotUntil = 0;
+  private damageBoostUntil = 0;
+  private supportDroneUntil = 0;
 
   public constructor(scene: Phaser.Scene) {
     super(scene, getPlayerSpawnX(scene), getPlayerSpawnY(scene), TEXTURE_KEYS.player);
@@ -72,6 +75,8 @@ export class Player extends Phaser.Physics.Arcade.Image {
     this.invulnerableUntil = 0;
     this.shieldUntil = 0;
     this.doubleShotUntil = 0;
+    this.damageBoostUntil = 0;
+    this.supportDroneUntil = 0;
     this.setAlpha(1);
     this.clearTint();
     this.shieldRing.setVisible(false);
@@ -154,7 +159,17 @@ export class Player extends Phaser.Physics.Arcade.Image {
       return;
     }
 
-    this.shieldUntil = time + POWER_UP_DURATIONS_MS.shield;
+    if (type === "shield") {
+      this.shieldUntil = time + POWER_UP_DURATIONS_MS.shield;
+      return;
+    }
+
+    if (type === "damageBoost") {
+      this.damageBoostUntil = time + POWER_UP_DURATIONS_MS.damageBoost;
+      return;
+    }
+
+    this.supportDroneUntil = time + POWER_UP_DURATIONS_MS.supportDrone;
   }
 
   public isInvulnerable(time: number): boolean {
@@ -167,6 +182,31 @@ export class Player extends Phaser.Physics.Arcade.Image {
 
   public hasDoubleShot(time: number): boolean {
     return time < this.doubleShotUntil;
+  }
+
+  public hasDamageBoost(time: number): boolean {
+    return time < this.damageBoostUntil;
+  }
+
+  public hasSupportDrone(time: number): boolean {
+    return time < this.supportDroneUntil;
+  }
+
+  public getBulletDamage(time: number): number {
+    return this.hasDamageBoost(time)
+      ? PLAYER_CONFIG.bulletDamage * PLAYER_CONFIG.damageBoostMultiplier
+      : PLAYER_CONFIG.bulletDamage;
+  }
+
+  public getCombatSnapshot(): PlayerCombatSnapshot {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+
+    return {
+      x: this.x,
+      y: this.y,
+      velocityX: body?.velocity.x ?? 0,
+      velocityY: body?.velocity.y ?? 0
+    };
   }
 
   public getActivePowerUps(time: number): ActivePowerUpState[] {
@@ -188,6 +228,22 @@ export class Player extends Phaser.Physics.Arcade.Image {
       });
     }
 
+    if (this.hasDamageBoost(time)) {
+      effects.push({
+        type: "damageBoost",
+        label: POWER_UP_LABELS.damageBoost,
+        remainingMs: this.damageBoostUntil - time
+      });
+    }
+
+    if (this.hasSupportDrone(time)) {
+      effects.push({
+        type: "supportDrone",
+        label: POWER_UP_LABELS.supportDrone,
+        remainingMs: this.supportDroneUntil - time
+      });
+    }
+
     return effects;
   }
 
@@ -199,13 +255,18 @@ export class Player extends Phaser.Physics.Arcade.Image {
   private fire(time: number, bullets: Phaser.Physics.Arcade.Group): void {
     this.fireReadyAt = time + PLAYER_CONFIG.fireCooldownMs;
     const offsets = this.hasDoubleShot(time) ? [-11, 11] : [0];
+    const damage = this.getBulletDamage(time);
 
     offsets.forEach((offset) => {
       const bullet = bullets.get() as PlayerBullet | null;
       if (!bullet) {
         return;
       }
-      bullet.fire(this.x + offset, this.y - this.displayHeight * 0.44, -PLAYER_CONFIG.bulletSpeed);
+      bullet.fire(this.x + offset, this.y - this.displayHeight * 0.44, {
+        velocityX: 0,
+        velocityY: -PLAYER_CONFIG.bulletSpeed,
+        damage
+      });
     });
 
     this.emit(PLAYER_EVENTS.FIRED);
@@ -222,5 +283,11 @@ export class Player extends Phaser.Physics.Arcade.Image {
     this.shieldRing.rotation += 0.02;
     this.shieldRing.setVisible(this.hasShield(time));
     this.shieldRing.setAlpha(this.hasShield(time) ? 0.8 : 0);
+
+    if (this.hasDamageBoost(time)) {
+      this.setTint(0xffd76c);
+    } else {
+      this.clearTint();
+    }
   }
 }

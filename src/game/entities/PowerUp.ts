@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 
-import type { PowerUpType } from "../types/game";
-import { POWER_UP_TEXTURES } from "../utils/constants";
+import type { PowerUpType } from "../types/combat";
+import { POWER_UP_TEXTURES } from "../config/combat";
 import { getViewportHeight } from "../utils/viewport";
 
 export class PowerUp extends Phaser.Physics.Arcade.Image {
