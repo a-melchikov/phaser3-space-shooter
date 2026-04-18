@@ -1,57 +1,57 @@
 import Phaser from "phaser";
 
+import { WAVE_BATCH_RETRY_MS } from "../config/combat";
 import type { WaveManagerCallbacks } from "../types/game";
-import { BANNER_DURATION_MS, BOSS_WAVE_INTERVAL } from "../utils/constants";
-import {
-  getEnemyBurstCount,
-  getEnemyQuota,
-  getEnemySpawnIntervalMs,
-  pickEnemyTypeForWave
-} from "../utils/enemyFactory";
-import { randomBetween } from "../utils/helpers";
+import type { SpawnBatch, WavePlan } from "../types/combat";
+import { WavePlanner } from "./WavePlanner";
 
 export class WaveManager {
   private currentWave = 1;
-  private bossWave = false;
+  private currentPlan?: WavePlan;
   private transitioning = false;
   private stopped = false;
-  private enemyQuota = 0;
-  private enemiesSpawned = 0;
-  private spawnEvent?: Phaser.Time.TimerEvent;
+  private batchIndex = 0;
+  private pendingBatch?: SpawnBatch;
+  private batchEvent?: Phaser.Time.TimerEvent;
   private transitionEvent?: Phaser.Time.TimerEvent;
 
   public constructor(
     private readonly scene: Phaser.Scene,
-    private readonly callbacks: WaveManagerCallbacks
+    private readonly callbacks: WaveManagerCallbacks,
+    private readonly planner = new WavePlanner()
   ) {}
 
   public startRun(): void {
     this.shutdown();
     this.stopped = false;
     this.currentWave = 1;
-    this.beginTransition(`Волна ${this.currentWave}`, () => {
-      this.startWave(this.currentWave);
+
+    const firstPlan = this.planner.createPlan(1);
+    this.beginTransition(firstPlan, () => {
+      this.startWave(firstPlan);
     });
   }
 
-  public update(_time: number, _delta: number): void {
-    if (this.stopped || this.transitioning) {
+  public update(): void {
+    if (this.stopped || this.transitioning || !this.currentPlan) {
       return;
     }
 
-    if (this.bossWave) {
-      if (!this.callbacks.isBossAlive() && !this.callbacks.hasActiveEnemyProjectiles()) {
-        this.advanceWave("Босс повержен");
+    if (this.currentPlan.kind === "boss") {
+      if (
+        !this.callbacks.isBossAlive() &&
+        !this.callbacks.hasActiveEnemies() &&
+        !this.callbacks.hasActiveEnemyProjectiles() &&
+        !this.callbacks.hasActiveHazards()
+      ) {
+        this.advanceWave();
       }
       return;
     }
 
-    if (
-      this.enemiesSpawned >= this.enemyQuota &&
-      !this.callbacks.hasActiveEnemies() &&
-      !this.callbacks.hasActiveEnemyProjectiles()
-    ) {
-      this.advanceWave(`Волна ${this.currentWave + 1}`);
+    const hasRemainingBatches = this.pendingBatch !== undefined || this.batchIndex < this.currentPlan.spawnBatches.length;
+    if (!hasRemainingBatches && !this.callbacks.hasActiveEnemies() && !this.callbacks.hasActiveEnemyProjectiles() && !this.callbacks.hasActiveHazards()) {
+      this.advanceWave();
     }
   }
 
@@ -59,8 +59,12 @@ export class WaveManager {
     return this.currentWave;
   }
 
+  public getCurrentPlan(): WavePlan | undefined {
+    return this.currentPlan;
+  }
+
   public isBossWave(): boolean {
-    return this.bossWave;
+    return this.currentPlan?.kind === "boss";
   }
 
   public isTransitioning(): boolean {
@@ -68,72 +72,90 @@ export class WaveManager {
   }
 
   public shutdown(): void {
-    this.spawnEvent?.remove(false);
+    this.batchEvent?.remove(false);
     this.transitionEvent?.remove(false);
-    this.spawnEvent = undefined;
+    this.batchEvent = undefined;
     this.transitionEvent = undefined;
+    this.pendingBatch = undefined;
+    this.batchIndex = 0;
+    this.currentPlan = undefined;
     this.transitioning = false;
     this.stopped = true;
-    this.enemyQuota = 0;
-    this.enemiesSpawned = 0;
   }
 
-  private startWave(wave: number): void {
+  private startWave(plan: WavePlan): void {
     if (this.stopped) {
       return;
     }
 
-    this.currentWave = wave;
-    this.bossWave = wave % BOSS_WAVE_INTERVAL === 0;
-    this.callbacks.onWaveChanged(this.currentWave, this.bossWave);
+    this.currentWave = plan.wave;
+    this.currentPlan = plan;
+    this.pendingBatch = undefined;
+    this.batchIndex = 0;
+    this.callbacks.onWaveChanged(plan);
 
-    if (this.bossWave) {
-      this.callbacks.spawnBoss(this.currentWave);
+    if (plan.kind === "boss") {
+      this.callbacks.spawnBoss(plan);
       return;
     }
 
-    this.enemyQuota = getEnemyQuota(this.currentWave);
-    this.enemiesSpawned = 0;
-    this.scheduleNextSpawn();
+    if (plan.spawnBatches.length === 0) {
+      return;
+    }
+
+    this.scheduleBatch(0);
   }
 
-  private scheduleNextSpawn(): void {
-    if (this.stopped || this.transitioning || this.bossWave || this.enemiesSpawned >= this.enemyQuota) {
+  private scheduleBatch(delayMs: number): void {
+    if (this.stopped || this.transitioning || !this.currentPlan || this.currentPlan.kind === "boss") {
       return;
     }
 
-    const delay = getEnemySpawnIntervalMs(this.currentWave) * randomBetween(0.75, 1.15);
-    this.spawnEvent = this.scene.time.delayedCall(delay, () => {
-      if (this.stopped || this.transitioning || this.bossWave) {
+    this.batchEvent?.remove(false);
+    this.batchEvent = this.scene.time.delayedCall(delayMs, () => {
+      if (this.stopped || this.transitioning || !this.currentPlan || this.currentPlan.kind === "boss") {
         return;
       }
 
-      const burstCount = Math.min(getEnemyBurstCount(this.currentWave), this.enemyQuota - this.enemiesSpawned);
-      for (let index = 0; index < burstCount; index += 1) {
-        this.callbacks.spawnEnemy(pickEnemyTypeForWave(this.currentWave));
-        this.enemiesSpawned += 1;
+      const batch = this.pendingBatch ?? this.currentPlan.spawnBatches[this.batchIndex];
+      if (!batch) {
+        return;
       }
 
-      this.scheduleNextSpawn();
+      const remainder = this.callbacks.spawnBatch(this.currentPlan, batch);
+      if (remainder) {
+        this.pendingBatch = remainder;
+        this.scheduleBatch(WAVE_BATCH_RETRY_MS);
+        return;
+      }
+
+      this.pendingBatch = undefined;
+      this.batchIndex += 1;
+      if (this.batchIndex < this.currentPlan.spawnBatches.length) {
+        this.scheduleBatch(batch.delayAfterMs);
+      }
     });
   }
 
-  private advanceWave(bannerText: string): void {
-    this.currentWave += 1;
-    this.beginTransition(bannerText, () => {
-      this.startWave(this.currentWave);
+  private advanceWave(): void {
+    const nextWave = this.currentWave + 1;
+    const nextPlan = this.planner.createPlan(nextWave);
+
+    this.beginTransition(nextPlan, () => {
+      this.startWave(nextPlan);
     });
   }
 
-  private beginTransition(text: string, onComplete: () => void): void {
+  private beginTransition(plan: WavePlan, onComplete: () => void): void {
     this.transitioning = true;
-    this.spawnEvent?.remove(false);
-    this.spawnEvent = undefined;
+    this.batchEvent?.remove(false);
+    this.batchEvent = undefined;
+    this.pendingBatch = undefined;
 
     this.callbacks.onTransitionStateChange(true);
-    this.callbacks.onBanner(text);
+    this.callbacks.onBanner(plan.bannerText);
 
-    this.transitionEvent = this.scene.time.delayedCall(BANNER_DURATION_MS, () => {
+    this.transitionEvent = this.scene.time.delayedCall(this.planner.getTransitionDuration(plan), () => {
       this.transitioning = false;
       this.callbacks.onTransitionStateChange(false);
       onComplete();
