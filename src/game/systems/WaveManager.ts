@@ -213,7 +213,9 @@ export class WaveManager {
     this.pendingBatch = undefined;
 
     this.callbacks.onTransitionStateChange(true);
-    this.callbacks.onBanner(plan.bannerText);
+    if (plan.kind === "normal") {
+      this.callbacks.onBanner(plan.bannerText);
+    }
 
     this.transitionEvent = this.scene.time.delayedCall(this.planner.getTransitionDuration(plan), () => {
       this.transitioning = false;

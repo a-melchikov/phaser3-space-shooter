@@ -189,9 +189,10 @@ export class UISystem {
     this.bossPanel = this.trackComponent(
       createGlassPanel(scene, {
         x: viewportCenterX,
-        y: 42,
+        y: 46,
         width: Math.min(380, viewportWidth - 80),
-        height: 52,
+        height: 64,
+        padding: 22,
         depth: UI_THEME.depth.hud + 2,
         fillColor: UI_THEME.colors.panel,
         fillAlpha: 0.72,
@@ -201,9 +202,9 @@ export class UISystem {
     );
     const bossTrack = scene.add.graphics();
     bossTrack.fillStyle(UI_THEME.colors.surface, 0.92);
-    bossTrack.fillRoundedRect(0, 18, Math.min(312, viewportWidth - 148), 10, 10);
+    bossTrack.fillRoundedRect(0, 24, Math.min(312, viewportWidth - 148), 10, 10);
     bossTrack.lineStyle(1, UI_THEME.colors.danger, 0.16);
-    bossTrack.strokeRoundedRect(0, 18, Math.min(312, viewportWidth - 148), 10, 10);
+    bossTrack.strokeRoundedRect(0, 24, Math.min(312, viewportWidth - 148), 10, 10);
     this.bossPanel.content.add(bossTrack);
 
     this.bossValueText = addUiText(scene, 0, 0, "", "meta", {
@@ -212,7 +213,7 @@ export class UISystem {
     this.bossPanel.content.add(this.bossValueText);
 
     this.bossBarFill = scene.add
-      .rectangle(0, 23, Math.min(312, viewportWidth - 148), 6, UI_THEME.colors.danger, 1)
+      .rectangle(0, 29, Math.min(312, viewportWidth - 148), 6, UI_THEME.colors.danger, 1)
       .setOrigin(0, 0.5);
     this.bossPanel.content.add(this.bossBarFill);
     this.bossPanel.root.setVisible(false);
@@ -259,7 +260,7 @@ export class UISystem {
     this.pausePanel.content.add(addUiText(scene, 0, 0, "Пауза", "heroTitle", {
       fontSize: "38px"
     }).setOrigin(0, 0));
-    this.pauseHintText = addUiText(scene, 0, 44, "Esc или P — продолжить матч", "meta", {
+    this.pauseHintText = addUiText(scene, 0, 50, "Esc или P — продолжить матч", "meta", {
       color: colorToHex(UI_THEME.colors.textSoft)
     }).setOrigin(0, 0);
     this.pausePanel.content.add(this.pauseHintText);
