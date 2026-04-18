@@ -815,8 +815,10 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private resolvePersonalRankMeta(snapshot: MenuLeaderboardSnapshot): string {
-    if (snapshot.playerProfile?.bestScore !== null && snapshot.playerProfile?.bestWave !== null) {
-      return `${snapshot.playerProfile.bestScore} pts • W${snapshot.playerProfile.bestWave}`;
+    const profile = snapshot.playerProfile;
+
+    if (profile && profile.bestScore !== null && profile.bestWave !== null) {
+      return `${profile.bestScore} pts • W${profile.bestWave}`;
     }
 
     return snapshot.mode === "online" ? "global board online" : "fallback mode";
