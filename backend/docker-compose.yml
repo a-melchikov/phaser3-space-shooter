@@ -24,7 +24,10 @@ services:
     container_name: starfall-aegis-backend
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env.example
+        required: true
+      - path: .env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
