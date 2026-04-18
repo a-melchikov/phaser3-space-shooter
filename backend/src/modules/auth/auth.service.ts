@@ -9,8 +9,16 @@ import type { AuthenticatedPlayer } from "./auth.types.js";
 
 export class FirebaseAuthService {
   private readonly adminAuth;
+  private readonly configured: boolean;
 
   public constructor(env: AppEnv) {
+    this.configured = Boolean(env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY);
+
+    if (!this.configured) {
+      this.adminAuth = null;
+      return;
+    }
+
     const existingApp = getApps().find((app) => app.name === "starfall-aegis-backend");
     const app =
       existingApp ??
@@ -28,7 +36,19 @@ export class FirebaseAuthService {
     this.adminAuth = getAuth(app);
   }
 
+  public isConfigured(): boolean {
+    return this.configured;
+  }
+
   public async verifyAndSyncPlayer(prisma: PrismaClient, idToken: string): Promise<AuthenticatedPlayer> {
+    if (!this.adminAuth) {
+      throw new AppError(
+        503,
+        "auth_unavailable",
+        "Firebase Admin credentials are not configured on the backend."
+      );
+    }
+
     try {
       const decodedToken = await this.adminAuth.verifyIdToken(idToken, true);
       const firebaseUid = decodedToken.uid;

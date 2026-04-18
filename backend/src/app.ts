@@ -39,7 +39,8 @@ export function buildApp(env: AppEnv = loadEnv()): FastifyInstance {
   void app.register(prismaPlugin);
 
   app.get("/health", async () => ({
-    status: "ok"
+    status: "ok",
+    authConfigured: authService.isConfigured()
   }));
 
   void app.register(async (instance) => {

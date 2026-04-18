@@ -20,11 +20,11 @@ export async function leaderboardRoutes(
   const controller = new LeaderboardController(leaderboardService);
   const authenticate = authenticateRequest(options.authService);
 
-  fastify.get("/leaderboard", controller.getLeaderboard);
-  fastify.get("/leaderboard/top", controller.getTopLeaderboard);
-  fastify.get("/leaderboard/around-me", { preHandler: authenticate }, controller.getAroundMe);
+  fastify.get("/api/leaderboard", controller.getLeaderboard);
+  fastify.get("/api/leaderboard/top", controller.getTopLeaderboard);
+  fastify.get("/api/leaderboard/around-me", { preHandler: authenticate }, controller.getAroundMe);
   fastify.post(
-    "/leaderboard/submit",
+    "/api/leaderboard/submit",
     {
       preHandler: authenticate,
       config: {

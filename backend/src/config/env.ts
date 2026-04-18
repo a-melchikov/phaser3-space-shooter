@@ -7,9 +7,9 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().min(1).default("*"),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
-  FIREBASE_PROJECT_ID: z.string().min(1, "FIREBASE_PROJECT_ID is required."),
-  FIREBASE_CLIENT_EMAIL: z.string().min(1, "FIREBASE_CLIENT_EMAIL is required."),
-  FIREBASE_PRIVATE_KEY: z.string().min(1, "FIREBASE_PRIVATE_KEY is required."),
+  FIREBASE_PROJECT_ID: z.string().trim().optional(),
+  FIREBASE_CLIENT_EMAIL: z.string().trim().optional(),
+  FIREBASE_PRIVATE_KEY: z.string().trim().optional(),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info")
@@ -36,7 +36,9 @@ export function loadEnv(): AppEnv {
 
   cachedEnv = {
     ...parsed.data,
-    FIREBASE_PRIVATE_KEY: parsed.data.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n")
+    FIREBASE_PROJECT_ID: parsed.data.FIREBASE_PROJECT_ID || undefined,
+    FIREBASE_CLIENT_EMAIL: parsed.data.FIREBASE_CLIENT_EMAIL || undefined,
+    FIREBASE_PRIVATE_KEY: parsed.data.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n") || undefined
   };
 
   return cachedEnv;

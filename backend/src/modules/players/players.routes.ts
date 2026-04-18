@@ -18,5 +18,5 @@ export async function playersRoutes(
   const controller = new PlayersController(playersService);
   const authenticate = authenticateRequest(options.authService);
 
-  fastify.get("/players/me", { preHandler: authenticate }, controller.getCurrentPlayer);
+  fastify.get("/api/players/me", { preHandler: authenticate }, controller.getCurrentPlayer);
 }
