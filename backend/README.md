@@ -92,7 +92,10 @@ backend/
 
 ```env
 PORT=3000
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/starfall_aegis?schema=public
+POSTGRES_DB=starfall_aegis
+POSTGRES_USER=starfall_aegis_app
+POSTGRES_PASSWORD=change-me-long-random-password
+DATABASE_URL=postgresql://starfall_aegis_app:change-me-long-random-password@localhost:5432/starfall_aegis?schema=public
 CORS_ORIGIN=http://localhost:5173
 RATE_LIMIT_MAX=20
 RATE_LIMIT_WINDOW_MS=60000
@@ -101,6 +104,12 @@ FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
 LOG_LEVEL=info
 ```
+
+Для локального запуска без Docker используйте `DATABASE_URL` с хостом `localhost`
+и поднимайте Postgres отдельно с теми же `POSTGRES_*` credentials.
+
+В `docker compose` backend получает внутренний `DATABASE_URL` автоматически из `POSTGRES_*`
+и ходит к Postgres по сервисному хосту `postgres`.
 
 ### Firebase Admin
 
@@ -143,7 +152,7 @@ docker compose up --build
 
 Что поднимется:
 
-- `postgres` на `localhost:5432`
+- `postgres` только во внутренней сети Docker Compose
 - `api` на `localhost:3000`
 
 Healthcheck:
