@@ -13,6 +13,8 @@ import { LeaderboardRepository } from "./leaderboard.repository.js";
 
 export class LeaderboardService {
   private readonly repository: LeaderboardRepository;
+  private readonly topLeaderboardCache = new Map<number, { expiresAt: number; items: Awaited<ReturnType<LeaderboardRepository["getLeaderboardTop"]>> }>();
+  private static readonly TOP_LEADERBOARD_CACHE_TTL_MS = 5000;
 
   public constructor(prisma: PrismaClient) {
     this.repository = new LeaderboardRepository(prisma);
@@ -22,8 +24,21 @@ export class LeaderboardService {
     return this.repository.getLeaderboardPage(limit, offset);
   }
 
-  public getTopLeaderboard(query: LeaderboardTopQuery) {
-    return this.repository.getLeaderboardTop(query.limit);
+  public async getTopLeaderboard(query: LeaderboardTopQuery) {
+    const now = Date.now();
+    const cached = this.topLeaderboardCache.get(query.limit);
+
+    if (cached && cached.expiresAt > now) {
+      return cached.items;
+    }
+
+    const items = await this.repository.getLeaderboardTop(query.limit);
+    this.topLeaderboardCache.set(query.limit, {
+      items,
+      expiresAt: now + LeaderboardService.TOP_LEADERBOARD_CACHE_TTL_MS
+    });
+
+    return items;
   }
 
   public getLeaderboardAroundPlayer(playerId: string, radius: number): Promise<AroundMeLeaderboard> {
@@ -62,6 +77,7 @@ export class LeaderboardService {
     });
 
     const rank = await this.repository.getPlayerRank(player.playerId);
+    this.topLeaderboardCache.clear();
 
     return {
       accepted: true,
