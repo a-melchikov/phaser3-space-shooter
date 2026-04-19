@@ -26,6 +26,8 @@ export class BackendLeaderboardClientError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 8000;
+
 export class BackendLeaderboardClient {
   private readonly baseUrl: string;
 
@@ -98,16 +100,34 @@ export class BackendLeaderboardClient {
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     let response: Response;
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      abortController.abort();
+    }, REQUEST_TIMEOUT_MS);
 
     try {
-      response = await fetch(`${this.baseUrl}${path}`, init);
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...init,
+        signal: abortController.signal
+      });
     } catch (error) {
+      if (abortController.signal.aborted) {
+        throw new BackendLeaderboardClientError(
+          "Онлайн-таблица не ответила вовремя.",
+          504,
+          "request_timeout",
+          error
+        );
+      }
+
       throw new BackendLeaderboardClientError(
         "Онлайн-таблица сейчас недоступна.",
         503,
         "backend_unavailable",
         error
       );
+    } finally {
+      window.clearTimeout(timeoutId);
     }
 
     const payload = (await response
