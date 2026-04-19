@@ -26,8 +26,6 @@ export class PlayersService {
 
     return {
       id: player.id,
-      firebaseUid: player.firebaseUid,
-      email: player.email,
       displayName: player.displayName,
       avatarUrl: player.avatarUrl,
       bestScore: player.bestScore,

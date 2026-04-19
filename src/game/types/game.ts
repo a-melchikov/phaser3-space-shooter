@@ -114,8 +114,6 @@ export interface AroundMeLeaderboardResponse {
 export interface PlayerLeaderboardProfile {
   player: {
     id: string;
-    firebaseUid: string;
-    email: string | null;
     displayName: string;
     avatarUrl: string | null;
   };

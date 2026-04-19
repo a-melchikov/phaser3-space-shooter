@@ -10,8 +10,6 @@ export class PlayersRepository {
       },
       select: {
         id: true,
-        firebaseUid: true,
-        email: true,
         displayName: true,
         avatarUrl: true,
         bestScore: true,

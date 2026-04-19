@@ -17,8 +17,6 @@ export class PlayersController {
     await reply.send({
       player: {
         id: profile.id,
-        firebaseUid: profile.firebaseUid,
-        email: profile.email,
         displayName: profile.displayName,
         avatarUrl: profile.avatarUrl
       },
