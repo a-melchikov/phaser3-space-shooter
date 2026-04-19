@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
 import type { AppEnv } from "../../config/env.js";
+import { AppError } from "../../utils/errors.js";
 import { authenticateRequest } from "../auth/auth.middleware.js";
 import type { FirebaseAuthService } from "../auth/auth.service.js";
 
@@ -27,6 +28,15 @@ export async function leaderboardRoutes(
       }
     }
   } as const;
+  const submitScoreHandler = options.env.RANKED_SUBMISSIONS_ENABLED
+    ? controller.submitScore
+    : async () => {
+        throw new AppError(
+          503,
+          "ranked_submissions_disabled",
+          "Ranked score submissions are disabled in this deployment."
+        );
+      };
 
   fastify.get("/api/leaderboard", readRateLimitConfig, controller.getLeaderboard);
   fastify.get("/api/leaderboard/top", readRateLimitConfig, controller.getTopLeaderboard);
@@ -49,6 +59,6 @@ export async function leaderboardRoutes(
         }
       }
     },
-    controller.submitScore
+    submitScoreHandler
   );
 }

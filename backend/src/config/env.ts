@@ -8,6 +8,7 @@ const envSchema = z.object({
     .string()
     .min(1)
     .default("http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173"),
+  RANKED_SUBMISSIONS_ENABLED: z.coerce.boolean().default(false),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   FIREBASE_PROJECT_ID: z.string().trim().optional(),

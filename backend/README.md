@@ -97,6 +97,7 @@ POSTGRES_USER=starfall_aegis_app
 POSTGRES_PASSWORD=change-me-long-random-password
 DATABASE_URL=postgresql://starfall_aegis_app:change-me-long-random-password@localhost:5432/starfall_aegis?schema=public
 CORS_ORIGIN=http://localhost:5173
+RANKED_SUBMISSIONS_ENABLED=false
 RATE_LIMIT_MAX=20
 RATE_LIMIT_WINDOW_MS=60000
 FIREBASE_PROJECT_ID=
