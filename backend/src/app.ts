@@ -44,14 +44,12 @@ export function buildApp(env: AppEnv = loadEnv()): FastifyInstance {
 
       return {
         status: "ok",
-        database: "ok",
-        authConfigured: authService.isConfigured()
+        database: "ok"
       };
     } catch {
       return reply.code(503).send({
         status: "degraded",
-        database: "unavailable",
-        authConfigured: authService.isConfigured()
+        database: "unavailable"
       });
     }
   });
