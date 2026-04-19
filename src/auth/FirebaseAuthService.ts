@@ -11,7 +11,8 @@ import {
 
 import type { AuthService } from "./AuthService";
 import { AuthState } from "./authState";
-import { getFirebaseApp, isFirebaseAuthConfigured } from "./firebase";
+import { isFirebaseAuthConfigured } from "./firebaseConfig";
+import { getFirebaseApp } from "./firebase";
 import {
   createAuthenticatedSession,
   createGuestSession,

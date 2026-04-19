@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 
-import { FirebaseAuthService } from "./auth/FirebaseAuthService";
+import { LazyFirebaseAuthService } from "./auth/LazyFirebaseAuthService";
 import { AuthState } from "./auth/authState";
 import { setGameAppContext } from "./game/appContext";
 import { createGameConfig } from "./game/config";
@@ -19,7 +19,7 @@ if (!appRoot) {
 }
 
 const authState = new AuthState();
-const authService = new FirebaseAuthService(authState);
+const authService = new LazyFirebaseAuthService(authState);
 const leaderboardClient = new BackendLeaderboardClient();
 const practiceScoreStore = new PracticeScoreStore();
 const resultsService = new ResultsService(
@@ -36,9 +36,11 @@ setGameAppContext({
   runStateStore
 });
 
-void authService.initialize();
-
 const game = new Phaser.Game(createGameConfig(appRoot));
+
+window.setTimeout(() => {
+  void authService.initialize();
+}, 0);
 
 window.addEventListener("beforeunload", () => {
   authService.destroy();
