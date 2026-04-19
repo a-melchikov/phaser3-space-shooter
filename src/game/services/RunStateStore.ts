@@ -15,6 +15,10 @@ import type {
 import { RUN_STATE_SAVE_VERSION } from "../types/runState";
 import { STORAGE_KEYS } from "../utils/constants";
 
+const MAX_RESTORABLE_ENEMIES = 48;
+const MAX_RESTORABLE_POWER_UPS = 14;
+const MAX_RESTORABLE_MINES = 8;
+
 interface StorageAdapter {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -131,7 +135,7 @@ export class RunStateStore {
       return false;
     }
 
-    if (typeof value.buildVersion !== "string" || value.buildVersion.length === 0) {
+    if (value.buildVersion !== GAME_BUILD_VERSION) {
       return false;
     }
 
@@ -227,17 +231,34 @@ function isSavedWaveProgressState(value: unknown): value is SavedWaveProgressSta
     return false;
   }
 
+  if (!isWavePlan(value.plan)) {
+    return false;
+  }
+
+  const maxRestorableEnemies = Math.min(
+    MAX_RESTORABLE_ENEMIES,
+    value.plan.caps.maxActiveEnemies,
+    value.plan.caps.globalMaxEnemies
+  );
+  const maxRestorableMines = Math.min(
+    MAX_RESTORABLE_MINES,
+    value.plan.caps.maxMines,
+    value.plan.caps.globalMaxMines
+  );
+
   return (
-    isWavePlan(value.plan) &&
     isNonNegativeInteger(value.nextBatchIndex) &&
     (value.pendingBatch === null || isSpawnBatch(value.pendingBatch)) &&
     isFiniteNumber(value.nextSpawnDelayMs) &&
     value.nextSpawnDelayMs >= 0 &&
     Array.isArray(value.activeEnemies) &&
+    value.activeEnemies.length <= maxRestorableEnemies &&
     value.activeEnemies.every((entry) => isSavedEnemyState(entry)) &&
     Array.isArray(value.activePowerUps) &&
+    value.activePowerUps.length <= MAX_RESTORABLE_POWER_UPS &&
     value.activePowerUps.every((entry) => isSavedWorldPowerUpState(entry)) &&
     Array.isArray(value.activeMines) &&
+    value.activeMines.length <= maxRestorableMines &&
     value.activeMines.every((entry) => isSavedMineState(entry)) &&
     isSavedBossState(value.boss)
   );
