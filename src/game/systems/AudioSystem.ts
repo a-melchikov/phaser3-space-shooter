@@ -37,6 +37,7 @@ export class AudioSystem {
 
   private readonly soundManager: Phaser.Sound.NoAudioSoundManager | Phaser.Sound.HTML5AudioSoundManager | Phaser.Sound.WebAudioSoundManager;
   private readonly activeSfx = new Map<ManagedSound, ActiveSfxEntry>();
+  private readonly activeSfxCounts = new Map<SfxKey, number>();
   private readonly sfxLastPlayedAt = new Map<SfxKey, number>();
   private currentMusic?: ManagedSound;
   private currentMusicKey?: MusicKey;
@@ -111,7 +112,7 @@ export class AudioSystem {
       return;
     }
 
-    const concurrentCount = Array.from(this.activeSfx.values()).filter((entry) => entry.key === key).length;
+    const concurrentCount = this.activeSfxCounts.get(key) ?? 0;
     if (rule.maxSimultaneous !== undefined && concurrentCount >= rule.maxSimultaneous) {
       return;
     }
@@ -127,19 +128,37 @@ export class AudioSystem {
       volume: this.resolveSfxVolume(key, volumeMultiplier)
     };
 
-    const cleanup = (): void => {
+    const unregister = (): void => {
+      const activeEntry = this.activeSfx.get(sound);
+      if (!activeEntry) {
+        return;
+      }
+
       this.activeSfx.delete(sound);
+      const activeCount = this.activeSfxCounts.get(activeEntry.key) ?? 0;
+      if (activeCount <= 1) {
+        this.activeSfxCounts.delete(activeEntry.key);
+        return;
+      }
+
+      this.activeSfxCounts.set(activeEntry.key, activeCount - 1);
     };
 
-    sound.once(Phaser.Sound.Events.COMPLETE, cleanup);
-    sound.once(Phaser.Sound.Events.STOP, cleanup);
-    sound.once(Phaser.Sound.Events.DESTROY, cleanup);
+    const destroyAfterPlayback = (): void => {
+      unregister();
+      sound.destroy();
+    };
+
+    sound.once(Phaser.Sound.Events.COMPLETE, destroyAfterPlayback);
+    sound.once(Phaser.Sound.Events.STOP, unregister);
+    sound.once(Phaser.Sound.Events.DESTROY, unregister);
 
     this.activeSfx.set(sound, { key, volumeMultiplier });
+    this.activeSfxCounts.set(key, concurrentCount + 1);
     this.sfxLastPlayedAt.set(key, now);
 
     if (!sound.play(playbackConfig)) {
-      cleanup();
+      unregister();
       sound.destroy();
     }
   }
