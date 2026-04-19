@@ -1,4 +1,4 @@
-import type { AuthMode } from "../../auth/types";
+import type { AuthMode, UserSession } from "../../auth/types";
 import type {
   BossDefinition,
   BossId,
@@ -65,13 +65,15 @@ export interface GameStartPayload {
 export interface GameOverPayload {
   score: number;
   wave: number;
-  session: SessionPresentation;
+  session: UserSession;
+  rankedSubmissionAllowed: boolean;
 }
 
 export interface CompletedRunResult {
   score: number;
   wave: number;
   completedAt: string;
+  rankedSubmissionAllowed: boolean;
 }
 
 export interface RankedScorePayload extends CompletedRunResult {

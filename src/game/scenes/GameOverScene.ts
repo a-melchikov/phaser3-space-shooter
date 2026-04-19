@@ -30,8 +30,15 @@ export class GameOverScene extends Phaser.Scene {
       mode: "guest",
       displayName: "Гость",
       rankedEligible: false,
+      provider: "guest",
+      isAuthenticated: false,
+      email: null,
+      avatarUrl: null,
+      user: null,
+      localGuest: true,
       isGuest: true
-    }
+    },
+    rankedSubmissionAllowed: false
   };
   private restartRequested = false;
   private readonly contentObjects: Phaser.GameObjects.GameObject[] = [];
@@ -54,17 +61,18 @@ export class GameOverScene extends Phaser.Scene {
     this.audioSystem.playMusic(MUSIC_KEYS.GAME_OVER);
     getGameAppContext().runStateStore.clear();
 
-    const session = getGameAppContext().authService.getSession();
+    const session = this.payload.session;
     const result: CompletedRunResult = {
       score: this.payload.score,
       wave: this.payload.wave,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
+      rankedSubmissionAllowed: this.payload.rankedSubmissionAllowed
     };
 
     const practiceScores = getGameAppContext().resultsService.recordPracticeResult(result, session);
 
     this.createBackground();
-    this.createContent(practiceScores, session);
+    this.createContent(practiceScores, session, result.rankedSubmissionAllowed);
     void this.updateRankedStatus(result, session);
 
     this.restartKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R);
@@ -105,7 +113,11 @@ export class GameOverScene extends Phaser.Scene {
     this.layoutBackground();
   }
 
-  private createContent(scores: PracticeScoreEntry[], session: UserSession): void {
+  private createContent(
+    scores: PracticeScoreEntry[],
+    session: UserSession,
+    rankedSubmissionAllowed: boolean
+  ): void {
     this.destroyContent();
 
     const viewportCenterX = getViewportCenterX(this);
@@ -149,7 +161,7 @@ export class GameOverScene extends Phaser.Scene {
         borderColor: UI_THEME.colors.danger
       })
     );
-    this.populateSummaryPanel(summaryPanel, cardWidth, session);
+    this.populateSummaryPanel(summaryPanel, cardWidth, session, rankedSubmissionAllowed);
     fadeScaleIn(this, summaryPanel.root, { delay: 80, scaleFrom: 0.97, yOffset: 12 });
 
     const leaderboardPanel = this.trackComponent(
@@ -206,7 +218,12 @@ export class GameOverScene extends Phaser.Scene {
     );
   }
 
-  private populateSummaryPanel(panel: UiPanel, panelWidth: number, session: UserSession): void {
+  private populateSummaryPanel(
+    panel: UiPanel,
+    panelWidth: number,
+    session: UserSession,
+    rankedSubmissionAllowed: boolean
+  ): void {
     const sessionLabel = session.isGuest ? "Гость" : `${session.displayName} • Google`;
     panel.content.add(addUiText(this, 0, 0, "Итоги сессии", "label").setOrigin(0, 0));
     panel.content.add(addUiText(this, 0, 26, `${this.payload.score} очков`, "heroTitle", {
@@ -221,7 +238,12 @@ export class GameOverScene extends Phaser.Scene {
       ? "Результат сохранён локально на этом устройстве."
       : "Результат сохранён локально и отправляется в ranked-поток, если backend доступен.";
 
-    panel.content.add(addUiText(this, 0, 110, modeSummary, "bodySoft", {
+    const effectiveModeSummary =
+      !session.isGuest && !rankedSubmissionAllowed
+        ? "Продолженный run сохранён локально и не отправляется в ranked."
+        : modeSummary;
+
+    panel.content.add(addUiText(this, 0, 110, effectiveModeSummary, "bodySoft", {
       wordWrap: { width: panelWidth - 48 },
       color: colorToHex(session.isGuest ? UI_THEME.colors.warning : UI_THEME.colors.success),
       lineSpacing: 5
@@ -342,7 +364,11 @@ export class GameOverScene extends Phaser.Scene {
 
   private handleResize(): void {
     this.layoutBackground();
-    this.createContent(getGameAppContext().resultsService.getPracticeScores(), getGameAppContext().authService.getSession());
+    this.createContent(
+      getGameAppContext().resultsService.getPracticeScores(),
+      this.payload.session,
+      this.payload.rankedSubmissionAllowed
+    );
   }
 
   private handleShutdown(): void {

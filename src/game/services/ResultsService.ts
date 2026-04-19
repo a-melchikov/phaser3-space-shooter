@@ -21,13 +21,15 @@ export class ResultsService {
   }
 
   public recordPracticeResult(result: CompletedRunResult, session: UserSession): PracticeScoreEntry[] {
+    const rankedEligible = canSubmitRankedScore(session) && result.rankedSubmissionAllowed;
+
     return this.practiceScoreStore.saveScore({
       score: result.score,
       wave: result.wave,
       date: result.completedAt,
       playerLabel: session.displayName,
       mode: session.mode,
-      rankedEligible: canSubmitRankedScore(session)
+      rankedEligible
     });
   }
 
@@ -35,6 +37,13 @@ export class ResultsService {
     result: CompletedRunResult,
     session: UserSession
   ): Promise<RankedScoreSubmissionOutcome> {
+    if (!result.rankedSubmissionAllowed) {
+      return {
+        status: "skipped",
+        message: "Продолженный run сохранён только локально и не участвует в ranked."
+      };
+    }
+
     if (!canSubmitRankedScore(session)) {
       return {
         status: "skipped",
@@ -46,6 +55,7 @@ export class ResultsService {
       score: result.score,
       wave: result.wave,
       completedAt: result.completedAt,
+      rankedSubmissionAllowed: result.rankedSubmissionAllowed,
       playerLabel: session.displayName
     };
 

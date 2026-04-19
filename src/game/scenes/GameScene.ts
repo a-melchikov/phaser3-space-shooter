@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 
+import type { UserSession } from "../../auth/types";
 import { getGameAppContext } from "../appContext";
 import { BOSS_EVENTS, Boss } from "../entities/Boss";
 import { ENEMY_EVENTS, Enemy } from "../entities/Enemy";
@@ -84,12 +85,16 @@ export class GameScene extends Phaser.Scene {
   private autosaveController?: RunAutosaveController;
   private pendingSavedRun?: SavedRunState;
   private isRestoringRun = false;
+  private rankedSubmissionAllowed = true;
+  private completionSession!: UserSession;
 
   public constructor() {
     super(SCENE_KEYS.GAME);
   }
 
   public init(data: GameStartPayload): void {
+    const runSession = data.savedRun?.run.session ?? data.session;
+
     this.isPaused = false;
     this.isTransitioning = true;
     this.isFinishing = false;
@@ -97,9 +102,13 @@ export class GameScene extends Phaser.Scene {
     this.score = 0;
     this.activeBoss = undefined;
     this.gameOverTimeoutId = undefined;
-    this.runSession = data.savedRun?.run.session ?? data.session;
+    this.runSession = runSession;
     this.pendingSavedRun = data.savedRun;
     this.isRestoringRun = false;
+    this.rankedSubmissionAllowed = data.source !== "resume";
+    this.completionSession = this.rankedSubmissionAllowed
+      ? getGameAppContext().authService.getSession()
+      : this.buildLocalOnlySession(runSession);
   }
 
   public create(): void {
@@ -859,9 +868,25 @@ export class GameScene extends Phaser.Scene {
       this.scene.start(SCENE_KEYS.GAME_OVER, {
         score: this.score,
         wave: this.waveManager.getCurrentWave(),
-        session: this.runSession
+        session: this.completionSession,
+        rankedSubmissionAllowed: this.rankedSubmissionAllowed
       });
     }, 650);
+  }
+
+  private buildLocalOnlySession(session: SessionPresentation): UserSession {
+    return {
+      mode: session.mode,
+      provider: session.mode,
+      isAuthenticated: false,
+      isGuest: session.isGuest,
+      displayName: session.displayName,
+      email: null,
+      avatarUrl: null,
+      user: null,
+      localGuest: session.isGuest,
+      rankedEligible: false
+    };
   }
 
   private forceResumeRuntimeState(): void {
@@ -1141,5 +1166,7 @@ export class GameScene extends Phaser.Scene {
     this.player = undefined as unknown as Player;
     this.autosaveController = undefined;
     this.pendingSavedRun = undefined;
+    this.rankedSubmissionAllowed = true;
+    this.completionSession = undefined as unknown as UserSession;
   }
 }
