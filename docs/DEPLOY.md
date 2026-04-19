@@ -45,6 +45,8 @@ cp .env.example .env
 Важно:
 
 - `VITE_*` переменные используются Vite на этапе сборки
+- `VITE_API_BASE_URL` по умолчанию оставляйте пустым, чтобы frontend ходил в `/api` на том же origin
+- `API_UPSTREAM` должен указывать на backend, доступный из контейнера `nginx` внутри Docker сети
 - значит `.env` должен существовать **до** `docker compose up -d --build`
 
 ## 4. Первый запуск
@@ -80,7 +82,7 @@ docker compose logs -f
 Откройте:
 
 ```text
-http://<IP_СЕРВЕРА>:8080
+https://<ВАШ_ДОМЕН>
 ```
 
 ## 7. Обновление приложения
@@ -131,8 +133,8 @@ docker compose up -d --build
 
 ## 11. Что можно добавить дальше
 
-- reverse proxy через `nginx` или `traefik`
-- HTTPS / SSL через Let's Encrypt
+- backend upstream для `/api`, доступный из контейнера frontend
+- HTTPS / SSL через Let's Encrypt или другой TLS-терминатор
 - домен вместо прямого IP
 - CI/CD сборку и деплой
 - отдельный backend для leaderboard и профилей

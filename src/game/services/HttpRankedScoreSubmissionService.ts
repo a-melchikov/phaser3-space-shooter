@@ -65,6 +65,13 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
           };
         }
 
+        if (error.statusCode === 503 || error.code === "backend_unavailable") {
+          return {
+            status: "unavailable",
+            message: error.message
+          };
+        }
+
         return {
           status: "failed",
           message: error.message

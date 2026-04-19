@@ -27,14 +27,14 @@ export class BackendLeaderboardClientError extends Error {
 }
 
 export class BackendLeaderboardClient {
-  private readonly baseUrl: string | null;
+  private readonly baseUrl: string;
 
   public constructor(baseUrl = import.meta.env.VITE_API_BASE_URL?.trim()) {
-    this.baseUrl = baseUrl ? baseUrl.replace(/\/+$/, "") : null;
+    this.baseUrl = baseUrl ? baseUrl.replace(/\/+$/, "") : "";
   }
 
   public isConfigured(): boolean {
-    return this.baseUrl !== null;
+    return true;
   }
 
   public submitRankedScore(
@@ -97,15 +97,19 @@ export class BackendLeaderboardClient {
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    if (!this.baseUrl) {
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, init);
+    } catch (error) {
       throw new BackendLeaderboardClientError(
-        "Leaderboard backend is not configured. Set VITE_API_BASE_URL first.",
+        "Онлайн-таблица сейчас недоступна.",
         503,
-        "backend_unavailable"
+        "backend_unavailable",
+        error
       );
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, init);
     const payload = (await response
       .json()
       .catch(() => null)) as T | BackendErrorShape | null;
