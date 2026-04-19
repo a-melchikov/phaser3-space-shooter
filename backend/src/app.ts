@@ -38,10 +38,23 @@ export function buildApp(env: AppEnv = loadEnv()): FastifyInstance {
   });
   void app.register(prismaPlugin);
 
-  app.get("/health", async () => ({
-    status: "ok",
-    authConfigured: authService.isConfigured()
-  }));
+  app.get("/health", async (_request, reply) => {
+    try {
+      await app.prisma.$queryRaw`SELECT 1`;
+
+      return {
+        status: "ok",
+        database: "ok",
+        authConfigured: authService.isConfigured()
+      };
+    } catch {
+      return reply.code(503).send({
+        status: "degraded",
+        database: "unavailable",
+        authConfigured: authService.isConfigured()
+      });
+    }
+  });
 
   void app.register(async (instance) => {
     await leaderboardRoutes(instance, {
