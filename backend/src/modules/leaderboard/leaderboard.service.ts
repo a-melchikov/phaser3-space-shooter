@@ -39,34 +39,22 @@ export class LeaderboardService {
     input: SubmitScoreInput
   ): Promise<SubmitScoreResult> {
     const submissionResult = await this.repository.executeTransaction(async (tx) => {
-      const currentBest = await this.repository.getPlayerBestState(tx, player.playerId);
       const scoreEntry = await this.repository.createScoreEntry(tx, player.playerId, input.score, input.wave);
-      const improvedBest = this.isBetterScore(
+      const updateResult = await this.repository.tryUpdatePlayerBest(
+        tx,
+        player.playerId,
         input.score,
         input.wave,
-        currentBest?.bestScore ?? null,
-        currentBest?.bestWave ?? null
+        scoreEntry.createdAt
       );
+      const currentBest = await this.repository.getPlayerBestState(tx, player.playerId);
 
-      if (!currentBest || improvedBest) {
-        const updatedBest = await this.repository.updatePlayerBest(
-          tx,
-          player.playerId,
-          input.score,
-          input.wave,
-          scoreEntry.createdAt
-        );
-
-        return {
-          improvedBest: true,
-          bestScore: updatedBest.bestScore ?? input.score,
-          bestWave: updatedBest.bestWave ?? input.wave,
-          bestScoreAt: updatedBest.bestScoreAt ?? scoreEntry.createdAt
-        };
+      if (!currentBest) {
+        throw new Error(`Player ${player.playerId} is missing after score submission.`);
       }
 
       return {
-        improvedBest: false,
+        improvedBest: updateResult.count > 0,
         bestScore: currentBest.bestScore ?? input.score,
         bestWave: currentBest.bestWave ?? input.wave,
         bestScoreAt: currentBest.bestScoreAt ?? scoreEntry.createdAt
@@ -83,26 +71,5 @@ export class LeaderboardService {
       bestScoreAt: submissionResult.bestScoreAt,
       rank
     };
-  }
-
-  private isBetterScore(
-    nextScore: number,
-    nextWave: number,
-    currentBestScore: number | null,
-    currentBestWave: number | null
-  ): boolean {
-    if (currentBestScore === null || currentBestWave === null) {
-      return true;
-    }
-
-    if (nextScore > currentBestScore) {
-      return true;
-    }
-
-    if (nextScore === currentBestScore && nextWave > currentBestWave) {
-      return true;
-    }
-
-    return false;
   }
 }

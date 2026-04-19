@@ -76,6 +76,47 @@ export class LeaderboardRepository {
     });
   }
 
+  public tryUpdatePlayerBest(
+    executor: PrismaExecutor,
+    playerId: string,
+    score: number,
+    wave: number,
+    bestScoreAt: Date
+  ): Promise<{ count: number }> {
+    return executor.player.updateMany({
+      where: {
+        id: playerId,
+        OR: [
+          {
+            bestScore: null
+          },
+          {
+            bestWave: null
+          },
+          {
+            bestScoreAt: null
+          },
+          {
+            bestScore: {
+              lt: score
+            }
+          },
+          {
+            bestScore: score,
+            bestWave: {
+              lt: wave
+            }
+          }
+        ]
+      },
+      data: {
+        bestScore: score,
+        bestWave: wave,
+        bestScoreAt
+      }
+    });
+  }
+
   public async getLeaderboardPage(limit: number, offset: number): Promise<LeaderboardPage> {
     const items = await this.prisma.$queryRaw<LeaderboardEntry[]>(Prisma.sql`
       WITH ranked AS (
