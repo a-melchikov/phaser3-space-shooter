@@ -19,10 +19,25 @@ export async function leaderboardRoutes(
   const leaderboardService = new LeaderboardService(fastify.prisma);
   const controller = new LeaderboardController(leaderboardService);
   const authenticate = authenticateRequest(options.authService);
+  const readRateLimitConfig = {
+    config: {
+      rateLimit: {
+        max: options.env.RATE_LIMIT_MAX,
+        timeWindow: options.env.RATE_LIMIT_WINDOW_MS
+      }
+    }
+  } as const;
 
-  fastify.get("/api/leaderboard", controller.getLeaderboard);
-  fastify.get("/api/leaderboard/top", controller.getTopLeaderboard);
-  fastify.get("/api/leaderboard/around-me", { preHandler: authenticate }, controller.getAroundMe);
+  fastify.get("/api/leaderboard", readRateLimitConfig, controller.getLeaderboard);
+  fastify.get("/api/leaderboard/top", readRateLimitConfig, controller.getTopLeaderboard);
+  fastify.get(
+    "/api/leaderboard/around-me",
+    {
+      preHandler: authenticate,
+      ...readRateLimitConfig
+    },
+    controller.getAroundMe
+  );
   fastify.post(
     "/api/leaderboard/submit",
     {
