@@ -31,7 +31,7 @@ import type {
   SavedWorldPowerUpState
 } from "../types/runState";
 import { SCENE_KEYS } from "../types/scene";
-import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
+import { DEFERRED_GAME_AUDIO_ASSETS, MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import {
   isBossWave,
   isEliteWave,
@@ -216,6 +216,14 @@ export class GameScene extends Phaser.Scene {
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
+  }
+
+  public preload(): void {
+    DEFERRED_GAME_AUDIO_ASSETS.forEach((asset) => {
+      if (!this.cache.audio.exists(asset.key)) {
+        this.load.audio(asset.key, asset.urls);
+      }
+    });
   }
 
   public override update(time: number, _delta: number): void {

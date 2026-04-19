@@ -138,6 +138,14 @@ export const AUDIO_ASSETS: AudioAssetDefinition[] = [
   }
 ];
 
+export const BOOT_AUDIO_ASSETS: AudioAssetDefinition[] = AUDIO_ASSETS.filter((asset) =>
+  asset.key !== MUSIC_KEYS.GAMEPLAY && asset.key !== MUSIC_KEYS.BOSS
+);
+
+export const DEFERRED_GAME_AUDIO_ASSETS: AudioAssetDefinition[] = AUDIO_ASSETS.filter((asset) =>
+  asset.key === MUSIC_KEYS.GAMEPLAY || asset.key === MUSIC_KEYS.BOSS
+);
+
 export const AUDIO_ASSET_MAP = Object.fromEntries(AUDIO_ASSETS.map((asset) => [asset.key, asset])) as Record<
   AudioKey,
   AudioAssetDefinition
