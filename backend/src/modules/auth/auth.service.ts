@@ -1,6 +1,6 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { AppEnv } from "../../config/env.js";
 import { AppError } from "../../utils/errors.js";
@@ -58,22 +58,11 @@ export class FirebaseAuthService {
           ? decodedToken.name.trim()
           : email ?? "Google player";
       const avatarUrl = typeof decodedToken.picture === "string" ? decodedToken.picture : null;
-
-      const player = await prisma.player.upsert({
-        where: {
-          firebaseUid
-        },
-        create: {
-          firebaseUid,
-          email,
-          displayName,
-          avatarUrl
-        },
-        update: {
-          email,
-          displayName,
-          avatarUrl
-        }
+      const player = await this.findOrSyncPlayer(prisma, {
+        firebaseUid,
+        email,
+        displayName,
+        avatarUrl
       });
 
       return {
@@ -88,5 +77,71 @@ export class FirebaseAuthService {
         reason: error instanceof Error ? error.message : "unknown"
       });
     }
+  }
+
+  private async findOrSyncPlayer(
+    prisma: PrismaClient,
+    identity: {
+      firebaseUid: string;
+      email: string | null;
+      displayName: string;
+      avatarUrl: string | null;
+    }
+  ) {
+    const existingPlayer = await prisma.player.findUnique({
+      where: {
+        firebaseUid: identity.firebaseUid
+      },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        avatarUrl: true
+      }
+    });
+
+    if (!existingPlayer) {
+      try {
+        return await prisma.player.create({
+          data: identity
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError
+          && error.code === "P2002"
+        ) {
+          const concurrentPlayer = await prisma.player.findUnique({
+            where: {
+              firebaseUid: identity.firebaseUid
+            }
+          });
+
+          if (concurrentPlayer) {
+            return concurrentPlayer;
+          }
+        }
+
+        throw error;
+      }
+    }
+
+    if (
+      existingPlayer.email === identity.email
+      && existingPlayer.displayName === identity.displayName
+      && existingPlayer.avatarUrl === identity.avatarUrl
+    ) {
+      return existingPlayer;
+    }
+
+    return prisma.player.update({
+      where: {
+        id: existingPlayer.id
+      },
+      data: {
+        email: identity.email,
+        displayName: identity.displayName,
+        avatarUrl: identity.avatarUrl
+      }
+    });
   }
 }
