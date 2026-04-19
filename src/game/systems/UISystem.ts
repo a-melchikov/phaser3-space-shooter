@@ -40,6 +40,9 @@ export class UISystem {
   private readonly profileValueText: Phaser.GameObjects.Text;
   private readonly powerUpEmptyText: Phaser.GameObjects.Text;
   private readonly powerUpRows: PowerUpRow[] = [];
+  private readonly powerUpBuffer: ActivePowerUpState[] = [];
+  private readonly powerUpRowLabels = ["", "", "", ""];
+  private readonly powerUpRowTextures = ["", "", "", ""];
   private readonly bossBarFill: Phaser.GameObjects.Rectangle;
   private readonly bossBarMaxWidth: number;
   private readonly bossValueText: Phaser.GameObjects.Text;
@@ -361,7 +364,7 @@ export class UISystem {
       ratio > 0.55 ? UI_THEME.colors.success : ratio > 0.25 ? UI_THEME.colors.warning : UI_THEME.colors.danger;
     this.healthMeter.setValue(ratio, `${Math.ceil(this.player.health)} / ${this.player.maxHealth}`, color);
     this.updateLivesIcons(this.player.lives);
-    this.setPowerUps(this.player.getActivePowerUps(time));
+    this.refreshPowerUps(time);
   }
 
   public setScore(score: number): void {
@@ -398,11 +401,50 @@ export class UISystem {
       row.label.setVisible(visible);
 
       if (!effect) {
+        this.powerUpRowLabels[index] = "";
+        this.powerUpRowTextures[index] = "";
         return;
       }
 
-      row.icon.setTexture(POWER_UP_TEXTURES[effect.type]);
+      const textureKey = POWER_UP_TEXTURES[effect.type];
+      row.icon.setTexture(textureKey);
       row.label.setText(`${effect.label} • ${Math.max(1, Math.ceil(effect.remainingMs / 1000))}с`);
+    });
+  }
+
+  private refreshPowerUps(time: number): void {
+    if (!this.player) {
+      return;
+    }
+
+    const effects = this.player.getActivePowerUps(time, this.powerUpBuffer);
+    this.powerUpEmptyText.setVisible(effects.length === 0);
+
+    this.powerUpRows.forEach((row, index) => {
+      const effect = effects[index];
+      const visible = Boolean(effect);
+
+      row.icon.setVisible(visible);
+      row.label.setVisible(visible);
+
+      if (!effect) {
+        this.powerUpRowLabels[index] = "";
+        this.powerUpRowTextures[index] = "";
+        return;
+      }
+
+      const textureKey = POWER_UP_TEXTURES[effect.type];
+      const label = `${effect.label} • ${Math.max(1, Math.ceil(effect.remainingMs / 1000))}с`;
+
+      if (this.powerUpRowTextures[index] !== textureKey) {
+        row.icon.setTexture(textureKey);
+        this.powerUpRowTextures[index] = textureKey;
+      }
+
+      if (this.powerUpRowLabels[index] !== label) {
+        row.label.setText(label);
+        this.powerUpRowLabels[index] = label;
+      }
     });
   }
 

@@ -210,42 +210,31 @@ export class Player extends Phaser.Physics.Arcade.Image {
     };
   }
 
-  public getActivePowerUps(time: number): ActivePowerUpState[] {
-    const effects: ActivePowerUpState[] = [];
+  public getActivePowerUps(time: number, target: ActivePowerUpState[] = []): ActivePowerUpState[] {
+    let nextIndex = 0;
 
     if (this.hasShield(time)) {
-      effects.push({
-        type: "shield",
-        label: POWER_UP_LABELS.shield,
-        remainingMs: this.shieldUntil - time
-      });
+      this.writeActivePowerUp(target, nextIndex, "shield", this.shieldUntil - time);
+      nextIndex += 1;
     }
 
     if (this.hasDoubleShot(time)) {
-      effects.push({
-        type: "doubleShot",
-        label: POWER_UP_LABELS.doubleShot,
-        remainingMs: this.doubleShotUntil - time
-      });
+      this.writeActivePowerUp(target, nextIndex, "doubleShot", this.doubleShotUntil - time);
+      nextIndex += 1;
     }
 
     if (this.hasDamageBoost(time)) {
-      effects.push({
-        type: "damageBoost",
-        label: POWER_UP_LABELS.damageBoost,
-        remainingMs: this.damageBoostUntil - time
-      });
+      this.writeActivePowerUp(target, nextIndex, "damageBoost", this.damageBoostUntil - time);
+      nextIndex += 1;
     }
 
     if (this.hasSupportDrone(time)) {
-      effects.push({
-        type: "supportDrone",
-        label: POWER_UP_LABELS.supportDrone,
-        remainingMs: this.supportDroneUntil - time
-      });
+      this.writeActivePowerUp(target, nextIndex, "supportDrone", this.supportDroneUntil - time);
+      nextIndex += 1;
     }
 
-    return effects;
+    target.length = nextIndex;
+    return target;
   }
 
   public capturePersistentState(time: number): SavedPlayerState {
@@ -318,6 +307,24 @@ export class Player extends Phaser.Physics.Arcade.Image {
 
   private extendPowerUpDuration(currentUntil: number, durationMs: number, time: number): number {
     return Math.max(currentUntil, time) + durationMs;
+  }
+
+  private writeActivePowerUp(
+    target: ActivePowerUpState[],
+    index: number,
+    type: Exclude<PowerUpType, "heal">,
+    remainingMs: number
+  ): void {
+    const entry = target[index] ?? {
+      type,
+      label: POWER_UP_LABELS[type],
+      remainingMs
+    };
+
+    entry.type = type;
+    entry.label = POWER_UP_LABELS[type];
+    entry.remainingMs = remainingMs;
+    target[index] = entry;
   }
 
   private fire(time: number, bullets: Phaser.Physics.Arcade.Group): void {
