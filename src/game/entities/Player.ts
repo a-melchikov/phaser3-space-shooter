@@ -109,12 +109,15 @@ export class Player extends Phaser.Physics.Arcade.Image {
     }
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const movement = new Phaser.Math.Vector2(velocityX, velocityY);
-    if (movement.lengthSq() > 0) {
-      movement.normalize().scale(PLAYER_CONFIG.speed);
+    const movementLengthSq = velocityX * velocityX + velocityY * velocityY;
+
+    if (movementLengthSq > 0) {
+      const movementScale = PLAYER_CONFIG.speed / Math.sqrt(movementLengthSq);
+      velocityX *= movementScale;
+      velocityY *= movementScale;
     }
 
-    body.setVelocity(movement.x, movement.y);
+    body.setVelocity(velocityX, velocityY);
 
     if (controls.fire.isDown && time >= this.fireReadyAt) {
       this.fire(time, bullets);
