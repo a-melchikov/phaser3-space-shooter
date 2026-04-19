@@ -54,8 +54,6 @@ export class MenuScene extends Phaser.Scene {
     this.audioSystem.playMusic(MUSIC_KEYS.MENU);
 
     this.createBackground();
-    this.renderContent();
-    void this.refreshLeaderboardSnapshot();
 
     this.enterKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
