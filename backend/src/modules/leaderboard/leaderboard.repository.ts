@@ -153,8 +153,22 @@ export class LeaderboardRepository {
   }
 
   public async getLeaderboardTop(limit: number): Promise<LeaderboardEntry[]> {
-    const page = await this.getLeaderboardPage(limit, 0);
-    return page.items;
+    return this.prisma.$queryRaw<LeaderboardEntry[]>(Prisma.sql`
+      WITH ranked AS (
+        ${this.getRankedPlayersSql()}
+      )
+      SELECT
+        ranked.rank,
+        ranked."playerId",
+        ranked."displayName",
+        ranked."avatarUrl",
+        ranked."bestScore",
+        ranked."bestWave",
+        ranked."bestScoreAt"
+      FROM ranked
+      ORDER BY ranked.rank
+      LIMIT ${limit}
+    `);
   }
 
   public async getPlayerRank(playerId: string): Promise<number | null> {
