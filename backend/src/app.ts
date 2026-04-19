@@ -66,6 +66,17 @@ export function buildApp(env: AppEnv = loadEnv()): FastifyInstance {
     const appError = isAppError(error)
       ? error
       : new AppError(500, "internal_error", "Internal server error.");
+    const exposeDetails = env.NODE_ENV !== "production";
+    const responseError = exposeDetails && appError.details !== undefined
+      ? {
+          code: appError.code,
+          message: appError.message,
+          details: appError.details
+        }
+      : {
+          code: appError.code,
+          message: appError.message
+        };
 
     request.log.error(
       {
@@ -76,11 +87,7 @@ export function buildApp(env: AppEnv = loadEnv()): FastifyInstance {
     );
 
     void reply.code(appError.statusCode).send({
-      error: {
-        code: appError.code,
-        message: appError.message,
-        details: appError.details
-      }
+      error: responseError
     });
   });
 
