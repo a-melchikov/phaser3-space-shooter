@@ -19,6 +19,14 @@ interface CombatDirectorOptions {
   onEnemySpawn?: (enemy: Enemy) => void;
 }
 
+interface ActiveEnemyStats {
+  total: number;
+  elites: number;
+  bossAdds: number;
+  turrets: number;
+  byArchetype: Partial<Record<PlannedEnemySpawn["archetype"], number>>;
+}
+
 export class CombatDirector {
   private currentPlan?: WavePlan;
 
@@ -241,23 +249,25 @@ export class CombatDirector {
   }
 
   private canSpawnEnemy(plan: WavePlan, spawn: PlannedEnemySpawn): boolean {
-    if (this.countActiveEnemies() >= Math.min(plan.caps.maxActiveEnemies, plan.caps.globalMaxEnemies)) {
+    const activeEnemyStats = this.collectActiveEnemyStats();
+
+    if (activeEnemyStats.total >= Math.min(plan.caps.maxActiveEnemies, plan.caps.globalMaxEnemies)) {
       return false;
     }
 
-    if (spawn.role === "elite" && this.countActiveElites() >= plan.caps.maxEliteEnemies) {
+    if (spawn.role === "elite" && activeEnemyStats.elites >= plan.caps.maxEliteEnemies) {
       return false;
     }
 
-    if (spawn.archetype === "sniper" && this.countActiveByArchetype("sniper") >= plan.caps.maxSnipers) {
+    if ((activeEnemyStats.byArchetype.sniper ?? 0) >= plan.caps.maxSnipers && spawn.archetype === "sniper") {
       return false;
     }
 
-    if (spawn.archetype === "turret" && this.countAnchoredTurrets() >= plan.caps.maxTurrets) {
+    if (spawn.archetype === "turret" && activeEnemyStats.turrets >= plan.caps.maxTurrets) {
       return false;
     }
 
-    if (spawn.source === "boss" && this.countBossAdds() >= plan.caps.maxBossAdds) {
+    if (spawn.source === "boss" && activeEnemyStats.bossAdds >= plan.caps.maxBossAdds) {
       return false;
     }
 
@@ -275,5 +285,41 @@ export class CombatDirector {
 
   private canSpawnMine(plan: WavePlan): boolean {
     return this.options.mines.countActive(true) < Math.min(plan.caps.maxMines, plan.caps.globalMaxMines);
+  }
+
+  private collectActiveEnemyStats(): ActiveEnemyStats {
+    const stats: ActiveEnemyStats = {
+      total: 0,
+      elites: 0,
+      bossAdds: 0,
+      turrets: 0,
+      byArchetype: {}
+    };
+
+    this.options.enemies.children.iterate((gameObject) => {
+      const enemy = gameObject as Enemy;
+      if (!enemy?.active) {
+        return true;
+      }
+
+      stats.total += 1;
+
+      if (enemy.isElite()) {
+        stats.elites += 1;
+      }
+
+      if (enemy.isBossAdd()) {
+        stats.bossAdds += 1;
+      }
+
+      if (enemy.archetypeId === "turret") {
+        stats.turrets += 1;
+      }
+
+      stats.byArchetype[enemy.archetypeId] = (stats.byArchetype[enemy.archetypeId] ?? 0) + 1;
+      return true;
+    });
+
+    return stats;
   }
 }
