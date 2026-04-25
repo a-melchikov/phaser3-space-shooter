@@ -62,14 +62,27 @@ export class MenuScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown", this.handleFirstInteraction, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
 
-    this.authUnsubscribe = getGameAppContext().authService.subscribe((session) => {
+    void this.initializeAuthBoundContent();
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
+  }
+
+  private async initializeAuthBoundContent(): Promise<void> {
+    const authService = getGameAppContext().authService;
+    await authService.initialize();
+
+    if (!this.scene.isActive(SCENE_KEYS.MENU) || this.authUnsubscribe) {
+      return;
+    }
+
+    this.session = authService.getSession();
+    this.resumeMetadata = getGameAppContext().runStateStore.getResumeMetadata();
+    this.authUnsubscribe = authService.subscribe((session) => {
       this.session = session;
       this.isAuthBusy = false;
       this.resumeMetadata = getGameAppContext().runStateStore.getResumeMetadata();
       void this.refreshLeaderboardSnapshot();
     });
-
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
   }
 
   public override update(time: number): void {
