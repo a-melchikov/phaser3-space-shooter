@@ -66,7 +66,6 @@ export class MenuScene extends Phaser.Scene {
       this.session = session;
       this.isAuthBusy = false;
       this.resumeMetadata = getGameAppContext().runStateStore.getResumeMetadata();
-      this.renderContent();
       void this.refreshLeaderboardSnapshot();
     });
 
