@@ -11,6 +11,8 @@ import {
   submitScoreSchema
 } from "./leaderboard.types.js";
 
+const LEADERBOARD_TOP_CACHE_CONTROL = "public, max-age=5, stale-while-revalidate=30";
+
 export class LeaderboardController {
   public constructor(private readonly leaderboardService: LeaderboardService) {}
 
@@ -57,7 +59,7 @@ export class LeaderboardController {
       limit: query.limit ?? 10
     });
 
-    await reply.send({
+    await reply.header("Cache-Control", LEADERBOARD_TOP_CACHE_CONTROL).send({
       items: items.map((item) => ({
         rank: item.rank,
         displayName: item.displayName,
