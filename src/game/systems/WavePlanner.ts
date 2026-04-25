@@ -111,7 +111,12 @@ export class WavePlanner {
     let remainingBudget = this.getWaveBudget(wave, kind, stageConfig, template);
 
     template.forcedBatches?.forEach((seed) => {
-      const enemies = seed.enemies.map((entry) => this.createPlannedSpawn(entry.archetype, entry.variant ?? this.resolveVariant(entry.archetype, wave, kind, spawnCounts), entry.lane, "wave"));
+      const enemies = seed.enemies.map((entry) => this.createPlannedSpawn(
+        entry.archetype,
+        entry.variant ?? this.resolveVariant(entry.archetype, wave, kind, stageConfig, spawnCounts),
+        entry.lane,
+        "wave"
+      ));
       enemies.forEach((enemy) => {
         remainingBudget -= this.getSpawnCost(enemy.archetype, enemy.variant);
         this.bumpSpawnCount(spawnCounts, enemy.archetype, enemy.variant);
@@ -135,7 +140,7 @@ export class WavePlanner {
           break;
         }
 
-        const variant = this.resolveVariant(pick.archetype, wave, kind, spawnCounts, pick.variant);
+        const variant = this.resolveVariant(pick.archetype, wave, kind, stageConfig, spawnCounts, pick.variant);
         const cost = this.getSpawnCost(pick.archetype, variant);
         if (cost > remainingBudget && enemies.length > 0) {
           break;
@@ -219,6 +224,7 @@ export class WavePlanner {
     archetype: EnemyArchetypeId,
     wave: number,
     kind: WaveKind,
+    stageConfig: ProgressionStageConfig,
     spawnCounts: Map<string, number>,
     preferredVariant: EnemyVariant = "normal"
   ): EnemyVariant {
@@ -240,7 +246,11 @@ export class WavePlanner {
       }
     }
 
-    if (kind === "elite" && (archetype === "heavy" || archetype === "kamikaze" || archetype === "tank")) {
+    if (
+      kind === "elite" &&
+      (archetype === "heavy" || archetype === "kamikaze" || archetype === "tank") &&
+      this.countPlannedEliteSpawns(spawnCounts) < stageConfig.caps.maxEliteEnemies
+    ) {
       return "elite";
     }
 
@@ -280,6 +290,19 @@ export class WavePlanner {
   private bumpSpawnCount(spawnCounts: Map<string, number>, archetype: EnemyArchetypeId, variant: EnemyVariant): void {
     const key = `${archetype}:${variant}`;
     spawnCounts.set(key, (spawnCounts.get(key) ?? 0) + 1);
+  }
+
+  private countPlannedEliteSpawns(spawnCounts: Map<string, number>): number {
+    let total = 0;
+
+    spawnCounts.forEach((count, key) => {
+      const [archetype, variant] = key.split(":") as [EnemyArchetypeId, EnemyVariant];
+      if (getEnemyRole(archetype, variant) === "elite") {
+        total += count;
+      }
+    });
+
+    return total;
   }
 
   private canAddMoreOfType(
