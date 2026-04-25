@@ -39,6 +39,8 @@ export class MenuScene extends Phaser.Scene {
   private isSettingsOpen = false;
   private resumeMetadata: ResumeMetadata | null = null;
   private leaderboardSnapshot: MenuLeaderboardSnapshot | null = null;
+  private leaderboardSnapshotSessionKey?: string;
+  private pendingLeaderboardSessionKey?: string;
   private isLeaderboardLoading = false;
   private leaderboardRequestId = 0;
 
@@ -961,26 +963,45 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private async refreshLeaderboardSnapshot(): Promise<void> {
-    const requestId = ++this.leaderboardRequestId;
-    this.isLeaderboardLoading = true;
+    const session = this.session;
+    const sessionKey = this.getLeaderboardSessionKey(session);
 
-    if (this.leaderboardSnapshot === null) {
-      this.renderContent();
+    if (
+      this.pendingLeaderboardSessionKey === sessionKey ||
+      (this.leaderboardSnapshot !== null && this.leaderboardSnapshotSessionKey === sessionKey)
+    ) {
+      return;
     }
 
+    const requestId = ++this.leaderboardRequestId;
+    this.pendingLeaderboardSessionKey = sessionKey;
+    this.isLeaderboardLoading = true;
+
     try {
-      const snapshot = await getGameAppContext().onlineLeaderboardService.loadMenuLeaderboard(this.session);
+      const snapshot = await getGameAppContext().onlineLeaderboardService.loadMenuLeaderboard(session);
       if (requestId !== this.leaderboardRequestId) {
         return;
       }
 
       this.leaderboardSnapshot = snapshot;
+      this.leaderboardSnapshotSessionKey = sessionKey;
     } finally {
       if (requestId === this.leaderboardRequestId) {
+        this.pendingLeaderboardSessionKey = undefined;
         this.isLeaderboardLoading = false;
         this.renderContent();
       }
     }
+  }
+
+  private getLeaderboardSessionKey(session: UserSession): string {
+    return [
+      session.mode,
+      session.provider,
+      session.user?.id ?? "anonymous",
+      session.displayName,
+      session.rankedEligible ? "ranked" : "local"
+    ].join(":");
   }
 
   private resolveProfileHeadline(): string {
@@ -1216,6 +1237,8 @@ export class MenuScene extends Phaser.Scene {
     this.isSettingsOpen = false;
     this.resumeMetadata = null;
     this.leaderboardSnapshot = null;
+    this.leaderboardSnapshotSessionKey = undefined;
+    this.pendingLeaderboardSessionKey = undefined;
     this.isLeaderboardLoading = false;
     this.leaderboardRequestId = 0;
     this.authMessage = "";
