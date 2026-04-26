@@ -11,6 +11,8 @@ const envSchema = z.object({
   RANKED_SUBMISSIONS_ENABLED: z.coerce.boolean().default(false),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  AUDIT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  AUDIT_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   FIREBASE_PROJECT_ID: z.string().trim().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().trim().optional(),
   FIREBASE_PRIVATE_KEY: z.string().trim().optional(),

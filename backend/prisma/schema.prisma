@@ -19,6 +19,7 @@ model Player {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   scoreEntries ScoreEntry[]
+  auditEvents  AuditEvent[]
 
   @@index([bestScore(sort: Desc), bestWave(sort: Desc), bestScoreAt(sort: Asc), id(sort: Asc)], map: "player_best_rank_idx")
 }
@@ -32,4 +33,29 @@ model ScoreEntry {
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@index([playerId, createdAt(sort: Desc)], map: "score_entry_player_created_idx")
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  eventType   String
+  category    String
+  actorType   String
+  playerId    String?
+  firebaseUid String?
+  sessionId   String?
+  ipAddress   String?
+  userAgent   String?
+  route       String?
+  source      String
+  requestId   String?
+  status      String
+  metadata    Json     @default("{}")
+  player      Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt(sort: Desc)], map: "audit_event_type_created_idx")
+  @@index([category, createdAt(sort: Desc)], map: "audit_category_created_idx")
+  @@index([playerId, createdAt(sort: Desc)], map: "audit_player_created_idx")
+  @@index([firebaseUid, createdAt(sort: Desc)], map: "audit_firebase_uid_created_idx")
+  @@index([sessionId, createdAt(sort: Desc)], map: "audit_session_created_idx")
 }
