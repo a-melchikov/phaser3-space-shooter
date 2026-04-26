@@ -44,8 +44,11 @@ export class GameOverScene extends Phaser.Scene {
   private readonly contentObjects: Phaser.GameObjects.GameObject[] = [];
   private readonly components: DestroyableComponent[] = [];
   private rankedStatusText?: Phaser.GameObjects.Text;
+  private economyStatusText?: Phaser.GameObjects.Text;
   private rankedStatusMessage = "Проверяем сохранение результата...";
   private rankedStatusColor = colorToHex(UI_THEME.colors.textSoft);
+  private economyStatusMessage = "Проверяем осколки...";
+  private economyStatusColor = colorToHex(UI_THEME.colors.textSoft);
 
   public constructor() {
     super(SCENE_KEYS.GAME_OVER);
@@ -73,7 +76,7 @@ export class GameOverScene extends Phaser.Scene {
 
     this.createBackground();
     this.createContent(practiceScores, session, result.rankedSubmissionAllowed);
-    void this.updateRankedStatus(result, session);
+    void this.updateEconomyThenRankedStatus(result, session);
 
     this.restartKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R);
     this.menuKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -153,7 +156,7 @@ export class GameOverScene extends Phaser.Scene {
         x: viewportCenterX,
         y: viewportHeight * (compact ? 0.39 : 0.37),
         width: cardWidth,
-        height: 246,
+        height: 278,
         depth: UI_THEME.depth.menu + 2,
         fillColor: UI_THEME.colors.panelStrong,
         fillAlpha: 0.88,
@@ -250,8 +253,17 @@ export class GameOverScene extends Phaser.Scene {
     }).setOrigin(0, 0));
 
     this.rankedStatusText = this.trackObject(
-      addUiText(this, panel.root.x - panelWidth * 0.5 + 24, panel.root.y + 78, this.rankedStatusMessage, "meta", {
+      addUiText(this, panel.root.x - panelWidth * 0.5 + 24, panel.root.y + 84, this.rankedStatusMessage, "meta", {
         color: this.rankedStatusColor,
+        wordWrap: { width: panelWidth - 48 }
+      })
+        .setOrigin(0, 0)
+        .setDepth(UI_THEME.depth.menu + 4)
+    ) as Phaser.GameObjects.Text;
+
+    this.economyStatusText = this.trackObject(
+      addUiText(this, panel.root.x - panelWidth * 0.5 + 24, panel.root.y + 130, this.economyStatusMessage, "meta", {
+        color: this.economyStatusColor,
         wordWrap: { width: panelWidth - 48 }
       })
         .setOrigin(0, 0)
@@ -288,6 +300,46 @@ export class GameOverScene extends Phaser.Scene {
     });
   }
 
+  private async updateEconomyThenRankedStatus(result: CompletedRunResult, session: UserSession): Promise<void> {
+    const economyRunId = await this.updateEconomyStatus();
+
+    await this.updateRankedStatus(
+      economyRunId ? { ...result, economyRunId } : result,
+      session
+    );
+  }
+
+  private async updateEconomyStatus(): Promise<string | undefined> {
+    const economy = this.payload.economy;
+
+    if (!economy) {
+      this.setEconomyStatus("Осколки не рассчитывались для этого забега.", UI_THEME.colors.textSoft);
+      return undefined;
+    }
+
+    const outcome = await getGameAppContext().economyService.finishRun(economy.summary);
+
+    if (outcome.status === "submitted") {
+      this.setEconomyStatus(outcome.message, outcome.response.capped ? UI_THEME.colors.warning : UI_THEME.colors.success);
+      return outcome.response.runId;
+    }
+
+    this.setEconomyStatus(outcome.message, outcome.status === "failed" ? UI_THEME.colors.warning : UI_THEME.colors.textSoft);
+    return undefined;
+  }
+
+  private setEconomyStatus(message: string, color: number): void {
+    this.economyStatusMessage = message;
+    this.economyStatusColor = colorToHex(color);
+
+    if (!this.economyStatusText || !this.economyStatusText.active) {
+      return;
+    }
+
+    this.economyStatusText.setColor(this.economyStatusColor);
+    this.economyStatusText.setText(message);
+  }
+
   private async updateRankedStatus(result: CompletedRunResult, session: UserSession): Promise<void> {
     const outcome = await getGameAppContext().resultsService.submitRankedResult(result, session);
 
@@ -316,12 +368,23 @@ export class GameOverScene extends Phaser.Scene {
     }
 
     this.restartRequested = true;
+    void this.startNewRunAsync();
+  }
+
+  private async startNewRunAsync(): Promise<void> {
     this.audioSystem.unlock();
     getGameAppContext().runStateStore.clear();
+    const session = getGameAppContext().authService.getSession();
+    const economyRun = await getGameAppContext().economyService.startRun(session).catch(() => null);
+
+    if (!this.scene.isActive(SCENE_KEYS.GAME_OVER)) {
+      return;
+    }
 
     const payload: GameStartPayload = {
       source: "gameover",
-      session: buildSessionPresentation(getGameAppContext().authService.getSession())
+      session: buildSessionPresentation(session),
+      economyRun: economyRun ?? undefined
     };
     this.scene.start(SCENE_KEYS.GAME, payload);
   }
@@ -390,7 +453,10 @@ export class GameOverScene extends Phaser.Scene {
     this.backgroundOverlay = undefined;
     this.restartRequested = false;
     this.rankedStatusText = undefined;
+    this.economyStatusText = undefined;
     this.rankedStatusMessage = "Проверяем сохранение результата...";
     this.rankedStatusColor = colorToHex(UI_THEME.colors.textSoft);
+    this.economyStatusMessage = "Проверяем осколки...";
+    this.economyStatusColor = colorToHex(UI_THEME.colors.textSoft);
   }
 }

@@ -5,6 +5,7 @@ import { getGameAppContext } from "../appContext";
 import { AudioSystem } from "../systems/AudioSystem";
 import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import type { GameStartPayload, MenuLeaderboardSnapshot, PracticeScoreEntry } from "../types/game";
+import type { EconomyProfileResponse, EconomyUpgradeCatalogItem } from "../types/economy";
 import type { ResumeMetadata } from "../types/runState";
 import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
@@ -14,6 +15,7 @@ import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../util
 import { AudioSettingsPanel } from "../ui/audioPanel";
 import { UI_THEME, addUiText, colorToHex, fadeScaleIn, isCompactViewport } from "../ui/theme";
 import { UiButton, createAmbientOrb, createGlassPanel, createScreenOverlay, type UiPanel } from "../ui/primitives";
+import { BackendEconomyClientError } from "../services/BackendEconomyClient";
 
 interface DestroyableComponent {
   destroy(): void;
@@ -30,6 +32,8 @@ export class MenuScene extends Phaser.Scene {
   private readonly components: DestroyableComponent[] = [];
   private readonly settingsOverlayObjects: Phaser.GameObjects.GameObject[] = [];
   private readonly settingsOverlayComponents: DestroyableComponent[] = [];
+  private readonly shopOverlayObjects: Phaser.GameObjects.GameObject[] = [];
+  private readonly shopOverlayComponents: DestroyableComponent[] = [];
   private audioSystem!: AudioSystem;
   private session: UserSession = createGuestSession();
   private isStarting = false;
@@ -37,6 +41,11 @@ export class MenuScene extends Phaser.Scene {
   private authMessage = "";
   private authMessageColor = colorToHex(UI_THEME.colors.textSoft);
   private isSettingsOpen = false;
+  private isShopOpen = false;
+  private isEconomyLoading = false;
+  private economyProfile: EconomyProfileResponse | null = null;
+  private economyMessage = "";
+  private economyMessageColor = colorToHex(UI_THEME.colors.textSoft);
   private resumeMetadata: ResumeMetadata | null = null;
   private leaderboardSnapshot: MenuLeaderboardSnapshot | null = null;
   private leaderboardSnapshotSessionKey?: string;
@@ -83,12 +92,19 @@ export class MenuScene extends Phaser.Scene {
       this.session = session;
       this.isAuthBusy = false;
       this.resumeMetadata = getGameAppContext().runStateStore.getResumeMetadata();
+      void this.refreshEconomyProfile();
       void this.refreshLeaderboardSnapshot();
     });
+    void this.refreshEconomyProfile();
   }
 
   public override update(time: number): void {
     this.background?.update(time);
+
+    if (this.isShopOpen && this.escapeKey && Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
+      this.closeShopOverlay();
+      return;
+    }
 
     if (this.isSettingsOpen && this.escapeKey && Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
       this.closeSettingsOverlay();
@@ -99,6 +115,7 @@ export class MenuScene extends Phaser.Scene {
       !this.isStarting &&
       !this.isAuthBusy &&
       !this.isSettingsOpen &&
+      !this.isShopOpen &&
       ((this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey)) ||
         (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)))
     ) {
@@ -242,6 +259,10 @@ export class MenuScene extends Phaser.Scene {
     if (this.isSettingsOpen) {
       this.renderSettingsOverlay();
     }
+
+    if (this.isShopOpen) {
+      this.renderShopOverlay();
+    }
   }
 
   private populateActionPanel(
@@ -293,6 +314,13 @@ export class MenuScene extends Phaser.Scene {
         color: colorToHex(UI_THEME.colors.textSoft),
         wordWrap: { width: localWidth }
       }).setOrigin(0, 0)
+    );
+
+    panel.content.add(
+      addUiText(this, localWidth, sublineTop, this.resolveEconomyBalanceText(), "meta", {
+        color: colorToHex(this.session.isGuest ? UI_THEME.colors.textMuted : UI_THEME.colors.warning),
+        align: "right"
+      }).setOrigin(1, 0)
     );
 
     const divider = this.add.graphics();
@@ -363,10 +391,25 @@ export class MenuScene extends Phaser.Scene {
       })
     );
 
-    const settingsButton = this.trackComponent(
+    const shopButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
         y: actionBaseY + (compact ? 82 : 96) + (hasResume ? (compact ? 12 : 14) : 0),
+        width: actionWidth,
+        height: 34,
+        label: "Улучшения",
+        variant: "secondary",
+        depth: UI_THEME.depth.menu + 6,
+        audioSystem: this.audioSystem,
+        enabled: !this.isAuthBusy && !this.isEconomyLoading,
+        onClick: () => this.openShopOverlay()
+      })
+    );
+
+    const settingsButton = this.trackComponent(
+      new UiButton(this, {
+        x: panel.root.x,
+        y: actionBaseY + (compact ? 122 : 136) + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
         height: 32,
         label: "Настройки звука",
@@ -393,7 +436,8 @@ export class MenuScene extends Phaser.Scene {
     }
     fadeScaleIn(this, primaryButton.root, { delay: continueButton ? 108 : 90, scaleFrom: 0.99, yOffset: 5 });
     fadeScaleIn(this, secondaryButton.root, { delay: continueButton ? 126 : 110, scaleFrom: 0.995, yOffset: 5 });
-    fadeScaleIn(this, settingsButton.root, { delay: continueButton ? 144 : 130, scaleFrom: 0.995, yOffset: 4 });
+    fadeScaleIn(this, shopButton.root, { delay: continueButton ? 144 : 130, scaleFrom: 0.995, yOffset: 4 });
+    fadeScaleIn(this, settingsButton.root, { delay: continueButton ? 162 : 150, scaleFrom: 0.995, yOffset: 4 });
 
     const helper = this.trackObject(
       addUiText(this, leftX + contentWidth * 0.5, panelTop + panelHeight - (compact ? 14 : 18), this.resolveActionHint(googleAvailable), "meta", {
@@ -962,6 +1006,304 @@ export class MenuScene extends Phaser.Scene {
     fadeScaleIn(this, closeButton.root, { delay: 34, scaleFrom: 0.99, yOffset: 4, duration: UI_THEME.motion.normal });
   }
 
+  private openShopOverlay(): void {
+    if (this.isShopOpen) {
+      return;
+    }
+
+    this.closeSettingsOverlay();
+    this.isShopOpen = true;
+    this.renderShopOverlay();
+  }
+
+  private closeShopOverlay(): void {
+    if (!this.isShopOpen) {
+      return;
+    }
+
+    this.isShopOpen = false;
+    this.destroyShopOverlay();
+  }
+
+  private trackShopOverlayObject<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.shopOverlayObjects.push(object);
+    return object;
+  }
+
+  private trackShopOverlayComponent<T extends DestroyableComponent>(component: T): T {
+    this.shopOverlayComponents.push(component);
+    return component;
+  }
+
+  private destroyShopOverlay(): void {
+    while (this.shopOverlayComponents.length > 0) {
+      this.shopOverlayComponents.pop()?.destroy();
+    }
+
+    while (this.shopOverlayObjects.length > 0) {
+      this.shopOverlayObjects.pop()?.destroy();
+    }
+  }
+
+  private renderShopOverlay(): void {
+    this.destroyShopOverlay();
+
+    const overlay = this.trackShopOverlayObject(createScreenOverlay(this, UI_THEME.colors.shadow, 0.78, UI_THEME.depth.overlay));
+    overlay.setAlpha(0).setInteractive();
+    overlay.on("pointerdown", (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+    });
+    this.tweens.add({
+      targets: overlay,
+      alpha: 0.9,
+      duration: UI_THEME.motion.normal,
+      ease: "Quad.easeOut"
+    });
+
+    const viewportWidth = getViewportWidth(this);
+    const viewportHeight = getViewportHeight(this);
+    const compact = isCompactViewport(this);
+    const panelWidth = Math.min(viewportWidth - 36, compact ? 520 : 880);
+    const panelHeight = Math.min(viewportHeight - 36, compact ? 470 : 456);
+    const panel = this.trackShopOverlayComponent(
+      createGlassPanel(this, {
+        x: getViewportCenterX(this),
+        y: getViewportHeight(this) * 0.5,
+        width: panelWidth,
+        height: panelHeight,
+        depth: UI_THEME.depth.overlayContent,
+        fillColor: UI_THEME.colors.panelStrong,
+        fillAlpha: 0.95,
+        glowColor: UI_THEME.colors.cyan,
+        borderColor: UI_THEME.colors.line
+      })
+    );
+    fadeScaleIn(this, panel.root, { scaleFrom: 0.97, yOffset: 8, duration: UI_THEME.motion.normal });
+
+    const contentWidth = panelWidth - 48;
+    const balance = this.economyProfile?.currency.shardsBalance ?? 0;
+    panel.content.add(addUiText(this, 0, 0, "Постоянные улучшения", "sectionTitle", {
+      fontSize: compact ? "20px" : "24px"
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, contentWidth, 4, `${balance} осколков`, "label", {
+      color: colorToHex(UI_THEME.colors.warning),
+      align: "right"
+    }).setOrigin(1, 0));
+    panel.content.add(addUiText(this, 0, 30, this.resolveShopSubtitle(), "meta", {
+      color: this.economyMessage ? this.economyMessageColor : colorToHex(this.session.isGuest ? UI_THEME.colors.warning : UI_THEME.colors.textSoft),
+      wordWrap: { width: contentWidth }
+    }).setOrigin(0, 0));
+
+    const items = this.economyProfile?.catalog ?? getGameAppContext().economyService.createGuestProfile().catalog;
+    const columns = compact ? 1 : 3;
+    const cardGap = compact ? 8 : 12;
+    const cardWidth = (contentWidth - cardGap * (columns - 1)) / columns;
+    const cardHeight = compact ? 74 : 92;
+    const startY = compact ? 72 : 76;
+
+    items.forEach((item, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      this.renderUpgradeCard(
+        panel,
+        item,
+        column * (cardWidth + cardGap),
+        startY + row * (cardHeight + cardGap),
+        cardWidth,
+        cardHeight,
+        compact
+      );
+    });
+
+    const closeButton = this.trackShopOverlayComponent(
+      new UiButton(this, {
+        x: getViewportCenterX(this),
+        y: getViewportHeight(this) * 0.5 + panelHeight * 0.5 - 30,
+        width: 150,
+        height: 34,
+        label: "Закрыть",
+        variant: "ghost",
+        depth: UI_THEME.depth.overlayContent + 4,
+        audioSystem: this.audioSystem,
+        onClick: () => this.closeShopOverlay()
+      })
+    );
+    fadeScaleIn(this, closeButton.root, { delay: 50, scaleFrom: 0.99, yOffset: 4 });
+  }
+
+  private renderUpgradeCard(
+    panel: UiPanel,
+    item: EconomyUpgradeCatalogItem,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    compact: boolean
+  ): void {
+    const rarityColor = this.getRarityColor(item.rarity);
+    const card = this.add.graphics();
+    card.fillStyle(UI_THEME.colors.panel, 0.68);
+    card.fillRoundedRect(x, y, width, height, 10);
+    card.lineStyle(1, rarityColor, 0.24);
+    card.strokeRoundedRect(x, y, width, height, 10);
+    panel.content.add(card);
+
+    panel.content.add(addUiText(this, x + 12, y + 8, item.title, "label", {
+      color: colorToHex(rarityColor),
+      fontSize: compact ? "12px" : "13px"
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, x + width - 12, y + 8, `${item.level}/${item.maxLevel}`, "meta", {
+      align: "right",
+      color: colorToHex(UI_THEME.colors.textSoft)
+    }).setOrigin(1, 0));
+    panel.content.add(addUiText(this, x + 12, y + 28, `${this.formatRarity(item.rarity)} • ${item.nextEffectLabel ?? item.effectLabel}`, "meta", {
+      color: colorToHex(UI_THEME.colors.text),
+      wordWrap: { width: width - 24 }
+    }).setOrigin(0, 0));
+    panel.content.add(addUiText(this, x + 12, y + 48, this.resolveUpgradeCardHint(item), "meta", {
+      color: colorToHex(item.canPurchase ? UI_THEME.colors.success : UI_THEME.colors.textMuted),
+      wordWrap: { width: width - 118 }
+    }).setOrigin(0, 0));
+
+    const button = this.trackShopOverlayComponent(
+      new UiButton(this, {
+        x: panel.root.x + panel.content.x + x + width - 58,
+        y: panel.root.y + panel.content.y + y + height - 22,
+        width: 92,
+        height: 30,
+        label: item.nextCost === null ? "MAX" : `${item.nextCost}`,
+        variant: item.canPurchase ? "success" : "ghost",
+        depth: UI_THEME.depth.overlayContent + 5,
+        audioSystem: this.audioSystem,
+        enabled: item.canPurchase && !this.isEconomyLoading && !this.session.isGuest,
+        onClick: () => void this.handlePurchaseUpgrade(item)
+      })
+    );
+    fadeScaleIn(this, button.root, { delay: 45, scaleFrom: 0.99, yOffset: 3 });
+  }
+
+  private async handlePurchaseUpgrade(item: EconomyUpgradeCatalogItem): Promise<void> {
+    if (this.isEconomyLoading || this.session.isGuest) {
+      return;
+    }
+
+    this.isEconomyLoading = true;
+    this.economyMessage = "";
+    this.renderShopOverlay();
+
+    try {
+      this.economyProfile = await getGameAppContext().economyService.purchaseUpgrade(
+        this.session,
+        item.key,
+        item.level
+      );
+      this.economyMessage = "Улучшение куплено.";
+      this.economyMessageColor = colorToHex(UI_THEME.colors.success);
+    } catch (error) {
+      this.economyMessage = error instanceof BackendEconomyClientError
+        ? error.message
+        : "Не удалось купить улучшение.";
+      this.economyMessageColor = colorToHex(UI_THEME.colors.danger);
+    } finally {
+      this.isEconomyLoading = false;
+      this.renderContent();
+    }
+  }
+
+  private async refreshEconomyProfile(): Promise<void> {
+    const session = this.session;
+    this.isEconomyLoading = true;
+
+    try {
+      this.economyProfile = await getGameAppContext().economyService.loadProfile(session);
+      this.economyMessage = "";
+      this.economyMessageColor = colorToHex(UI_THEME.colors.textSoft);
+    } catch (error) {
+      this.economyProfile = getGameAppContext().economyService.createGuestProfile();
+      this.economyMessage = error instanceof BackendEconomyClientError
+        ? error.message
+        : "Экономика сейчас недоступна.";
+      this.economyMessageColor = colorToHex(UI_THEME.colors.warning);
+    } finally {
+      this.isEconomyLoading = false;
+      if (this.scene.isActive(SCENE_KEYS.MENU)) {
+        this.renderContent();
+      }
+    }
+  }
+
+  private resolveEconomyBalanceText(): string {
+    if (this.isEconomyLoading) {
+      return "осколки: ...";
+    }
+
+    if (this.session.isGuest) {
+      return "осколки после входа";
+    }
+
+    return `${this.economyProfile?.currency.shardsBalance ?? 0} осколков`;
+  }
+
+  private resolveShopSubtitle(): string {
+    if (this.economyMessage) {
+      return this.economyMessage;
+    }
+
+    if (this.session.isGuest) {
+      return "Гость может играть и видеть возможную награду, но осколки и улучшения сохраняются только после входа через Google.";
+    }
+
+    return "Небольшие постоянные бонусы применяются к следующему забегу.";
+  }
+
+  private resolveUpgradeCardHint(item: EconomyUpgradeCatalogItem): string {
+    if (this.session.isGuest) {
+      return "нужен Google";
+    }
+
+    if (item.nextCost === null) {
+      return "максимум";
+    }
+
+    if (!item.canPurchase) {
+      return "не хватает осколков";
+    }
+
+    return "улучшить";
+  }
+
+  private getRarityColor(rarity: EconomyUpgradeCatalogItem["rarity"]): number {
+    if (rarity === "legendary") {
+      return UI_THEME.colors.warning;
+    }
+
+    if (rarity === "epic") {
+      return UI_THEME.colors.violet;
+    }
+
+    if (rarity === "rare") {
+      return UI_THEME.colors.cyan;
+    }
+
+    return UI_THEME.colors.success;
+  }
+
+  private formatRarity(rarity: EconomyUpgradeCatalogItem["rarity"]): string {
+    if (rarity === "legendary") {
+      return "legendary";
+    }
+
+    if (rarity === "epic") {
+      return "epic";
+    }
+
+    if (rarity === "rare") {
+      return "rare";
+    }
+
+    return "common";
+  }
+
   private async refreshLeaderboardSnapshot(): Promise<void> {
     const session = this.session;
     const sessionKey = this.getLeaderboardSessionKey(session);
@@ -1095,6 +1437,10 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.isStarting = true;
+    void this.startGameAsync(mode);
+  }
+
+  private async startGameAsync(mode: "new" | "resume"): Promise<void> {
     const runStateStore = getGameAppContext().runStateStore;
 
     if (mode === "new") {
@@ -1109,10 +1455,23 @@ export class MenuScene extends Phaser.Scene {
       return;
     }
 
+    const economyRun = mode === "new"
+      ? await getGameAppContext().economyService.startRun(this.session).catch((error) => {
+          this.economyMessage = error instanceof Error ? error.message : "Экономика сейчас недоступна.";
+          this.economyMessageColor = colorToHex(UI_THEME.colors.warning);
+          return null;
+        })
+      : null;
+
+    if (!this.scene.isActive(SCENE_KEYS.MENU)) {
+      return;
+    }
+
     const payload: GameStartPayload = {
       source: mode === "resume" ? "resume" : "menu",
       session: savedRun?.run.session ?? buildSessionPresentation(this.session),
-      savedRun: savedRun ?? undefined
+      savedRun: savedRun ?? undefined,
+      economyRun: savedRun?.run.economyRun ?? economyRun ?? undefined
     };
 
     this.scene.start(SCENE_KEYS.GAME, payload);
@@ -1190,6 +1549,7 @@ export class MenuScene extends Phaser.Scene {
 
   private destroyContent(): void {
     this.destroySettingsOverlay();
+    this.destroyShopOverlay();
 
     while (this.components.length > 0) {
       this.components.pop()?.destroy();
@@ -1242,6 +1602,11 @@ export class MenuScene extends Phaser.Scene {
     this.isStarting = false;
     this.isAuthBusy = false;
     this.isSettingsOpen = false;
+    this.isShopOpen = false;
+    this.isEconomyLoading = false;
+    this.economyProfile = null;
+    this.economyMessage = "";
+    this.economyMessageColor = colorToHex(UI_THEME.colors.textSoft);
     this.resumeMetadata = null;
     this.leaderboardSnapshot = null;
     this.leaderboardSnapshotSessionKey = undefined;
