@@ -386,3 +386,27 @@ To add a new music track or SFX:
 - `MenuScene`, `GameScene`, and `GameOverScene` only talk to `AudioSystem` through its public API
 - scene shutdown does not destroy the global audio service, which prevents duplicated music after restart
 - app-level teardown calls `AudioSystem.destroyGlobal()` from `main.ts`
+## Осколки и постоянная прогрессия
+
+В игре есть одна постоянная валюта аккаунта: **осколки**. Они начисляются за high-level события забега: уничтожение обычных и элитных врагов, победы над боссами, волны без урона, boss wave без потери жизни, высокий остаток HP и серии волн без смерти. Осколки не лежат в `localStorage` как источник истины: баланс, покупки, ledger и награды забегов хранятся на backend и привязаны к Firebase/Google игроку.
+
+Гость может играть без ограничений и видеть, сколько осколков мог бы получить за забег, но не может сохранять награды и покупать постоянные улучшения. После входа через Google меню показывает баланс и панель улучшений.
+
+Постоянные улучшения имеют редкость, цену, уровень и жёсткий максимум:
+
+- common: `Усиленный корпус`, `Калиброванные орудия`, `Улучшенный реактор`
+- rare: `Расширенный импульс`, `Протокол восстановления`, `Калибровка дропа`
+- epic: `Боевой дрон`, `Двойной контур`
+- legendary: `Протокол Эгида`
+
+Эффекты намеренно небольшие: немного HP, урона, fire rate, длительности бонусов, силы ремонта, drop chance, слабый постоянный дрон, короткий double-shot в начале волны и короткий щит в начале boss wave. Улучшения не дают бессмертия, бесконечного double-shot или автопобеды.
+
+Economy flow:
+
+1. Меню для авторизованного игрока вызывает `POST /api/economy/run/start` и получает `runId` плюс snapshot уровней улучшений.
+2. `GameScene` применяет snapshot к текущему забегу и сохраняет `runId` вместе с autosave, чтобы продолженный забег мог получить награду один раз.
+3. На `Game Over` клиент отправляет summary забега в `POST /api/economy/run/finish`.
+4. Backend валидирует summary, сам считает награду, применяет caps, пишет `EconomyRunReward` и ledger transaction.
+5. Повторная отправка того же `runId` возвращает уже сохранённую награду без повторного начисления.
+
+V1 anti-abuse не является полноценным server-authoritative anti-cheat: сам gameplay исполняется на клиенте. Backend всё равно не имеет endpoint-а прямого начисления, требует Firebase token, проверяет принадлежность `runId`, идемпотентность finish, caps по волне/kill count/reward/duration и audit-ит suspicious submissions.

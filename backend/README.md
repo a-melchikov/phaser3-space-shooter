@@ -1,3 +1,28 @@
+## Economy API: осколки
+
+Backend хранит постоянную валюту аккаунта **осколки** и постоянные улучшения игрока. Все endpoints ниже protected и требуют `Authorization: Bearer <firebase-id-token>`; guest mode не может читать баланс, покупать улучшения или отправлять economy rewards.
+
+### Таблицы
+
+- `PlayerEconomy`: текущий баланс, lifetime earned/spent.
+- `EconomyTransaction`: ledger начислений и списаний с `runId`, `upgradeKey` и metadata.
+- `PlayerUpgrade`: текущие уровни постоянных улучшений, unique `[playerId, upgradeKey]`.
+- `EconomyRunSession`: backend economy-session забега с unique `runId`, status и snapshot уровней улучшений.
+- `EconomyRunReward`: финальная награда забега, unique `runId`, breakdown и metadata.
+
+### Endpoints
+
+- `GET /api/economy/me` возвращает баланс, уровни и catalog улучшений с ценой следующего уровня.
+- `POST /api/economy/purchase` принимает `{ "upgradeKey": "...", "expectedLevel": 0 }`, атомарно списывает осколки и повышает уровень.
+- `POST /api/economy/run/start` создаёт economy-session и возвращает `runId` + snapshot upgrades.
+- `POST /api/economy/run/finish` принимает summary забега, валидирует, считает reward на сервере и начисляет осколки один раз.
+
+Повторный `finish` для того же `runId` идемпотентен: backend возвращает уже сохранённую награду без второй transaction.
+
+### Anti-abuse v1
+
+Это не полноценный server-authoritative anti-cheat, потому что gameplay остаётся client-driven. Backend всё равно защищает экономику: нет прямого `add shards`, все операции требуют Firebase auth, purchase идёт через serializable transaction, баланс не уходит ниже нуля, max level проверяется на сервере, reward считается только из submitted summary с caps по волне, kill count, boss kills, reward per wave/run и минимальной длительности. Suspicious/capped/rejected submissions пишутся в audit events.
+
 # Starfall Aegis Leaderboard Backend
 
 Backend-сервис для ranked leaderboard игры `Starfall Aegis`.
