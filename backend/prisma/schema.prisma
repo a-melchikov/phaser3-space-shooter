@@ -8,31 +8,39 @@ datasource db {
 }
 
 model Player {
-  id           String       @id @default(cuid())
-  firebaseUid  String       @unique
-  email        String?
-  displayName  String
-  avatarUrl    String?
-  bestScore    Int?
-  bestWave     Int?
-  bestScoreAt  DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  scoreEntries ScoreEntry[]
-  auditEvents  AuditEvent[]
+  id                  String              @id @default(cuid())
+  firebaseUid         String              @unique
+  email               String?
+  displayName         String
+  avatarUrl           String?
+  bestScore           Int?
+  bestWave            Int?
+  bestScoreAt         DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  scoreEntries        ScoreEntry[]
+  auditEvents         AuditEvent[]
+  economy             PlayerEconomy?
+  economyTransactions EconomyTransaction[]
+  playerUpgrades      PlayerUpgrade[]
+  economyRunSessions  EconomyRunSession[]
+  economyRunRewards   EconomyRunReward[]
 
   @@index([bestScore(sort: Desc), bestWave(sort: Desc), bestScoreAt(sort: Asc), id(sort: Asc)], map: "player_best_rank_idx")
 }
 
 model ScoreEntry {
-  id        String   @id @default(cuid())
-  playerId  String
-  score     Int
-  wave      Int
-  createdAt DateTime @default(now())
-  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id           String             @id @default(cuid())
+  playerId     String
+  score        Int
+  wave         Int
+  economyRunId String?
+  createdAt    DateTime           @default(now())
+  player       Player             @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  economyRun   EconomyRunSession? @relation(fields: [economyRunId], references: [runId], onDelete: SetNull)
 
   @@index([playerId, createdAt(sort: Desc)], map: "score_entry_player_created_idx")
+  @@index([economyRunId], map: "score_entry_economy_run_idx")
 }
 
 model AuditEvent {
@@ -58,4 +66,82 @@ model AuditEvent {
   @@index([playerId, createdAt(sort: Desc)], map: "audit_player_created_idx")
   @@index([firebaseUid, createdAt(sort: Desc)], map: "audit_firebase_uid_created_idx")
   @@index([sessionId, createdAt(sort: Desc)], map: "audit_session_created_idx")
+}
+
+model PlayerEconomy {
+  id                    String   @id @default(cuid())
+  playerId              String   @unique
+  shardsBalance         Int      @default(0)
+  lifetimeShardsEarned  Int      @default(0)
+  lifetimeShardsSpent   Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  player                Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+model EconomyTransaction {
+  id         String   @id @default(cuid())
+  playerId   String
+  type       String
+  amount     Int
+  reason     String
+  runId      String?
+  sourceId   String?
+  upgradeKey String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, createdAt(sort: Desc)], map: "economy_transaction_player_created_idx")
+  @@index([runId], map: "economy_transaction_run_idx")
+  @@index([upgradeKey], map: "economy_transaction_upgrade_idx")
+}
+
+model PlayerUpgrade {
+  id         String   @id @default(cuid())
+  playerId   String
+  upgradeKey String
+  level      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, upgradeKey], map: "player_upgrade_player_key_unique")
+  @@index([playerId], map: "player_upgrade_player_idx")
+}
+
+model EconomyRunSession {
+  id               String             @id @default(cuid())
+  runId            String             @unique
+  playerId         String
+  status           String             @default("started")
+  startedAt        DateTime           @default(now())
+  finishedAt       DateTime?
+  clientBuildVersion String?
+  upgradesSnapshot Json               @default("{}")
+  metadata         Json               @default("{}")
+  updatedAt        DateTime           @updatedAt
+  player           Player             @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  reward           EconomyRunReward?
+  scoreEntries     ScoreEntry[]
+
+  @@index([playerId, startedAt(sort: Desc)], map: "economy_run_player_started_idx")
+  @@index([status, startedAt(sort: Desc)], map: "economy_run_status_started_idx")
+}
+
+model EconomyRunReward {
+  id          String            @id @default(cuid())
+  playerId    String
+  runId       String            @unique
+  wave        Int
+  score       Int
+  baseReward  Int
+  bonusReward Int
+  totalReward Int
+  finalizedAt DateTime          @default(now())
+  metadata    Json              @default("{}")
+  player      Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  runSession  EconomyRunSession @relation(fields: [runId], references: [runId], onDelete: Cascade)
+
+  @@index([playerId, finalizedAt(sort: Desc)], map: "economy_reward_player_finalized_idx")
 }
