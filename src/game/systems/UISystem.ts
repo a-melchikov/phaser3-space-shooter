@@ -1,15 +1,19 @@
 import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
+import type { InputMode } from "../input/inputTypes";
 import type { ActivePowerUpState, SessionPresentation } from "../types/game";
 import { POWER_UP_TEXTURES } from "../config/combat";
 import { getViewportCenterX, getViewportCenterY, getViewportHeight, getViewportWidth } from "../utils/viewport";
+import { getDeviceProfile, isMobileLayout, type DeviceProfile } from "../utils/device";
 import { AudioSystem } from "./AudioSystem";
 import { AudioSettingsPanel } from "../ui/audioPanel";
 import { UI_THEME, addUiText, colorToHex, fadeScaleIn } from "../ui/theme";
 import { UiButton, UiMeter, createAmbientOrb, createGlassPanel, createScreenOverlay, type UiPanel } from "../ui/primitives";
 
 interface UISystemOptions {
+  inputMode?: InputMode;
+  deviceProfile?: DeviceProfile;
   onPauseResume?: () => void;
   onPauseExitToMenu?: () => void;
 }
@@ -71,16 +75,32 @@ export class UISystem {
     const viewportHeight = getViewportHeight(scene);
     const viewportCenterX = getViewportCenterX(scene);
     const viewportCenterY = getViewportCenterY(scene);
+    const deviceProfile = options.deviceProfile ?? getDeviceProfile(scene);
+    const mobile = options.inputMode === "mobile" || isMobileLayout(scene);
+    const portrait = deviceProfile.orientation === "portrait";
+    const safeArea = deviceProfile.safeArea;
 
-    const panelTop = 84;
+    const hudScale = mobile ? (portrait ? 0.78 : 0.82) : 1;
     const sidePanelWidth = 256;
     const sidePanelPadding = 22;
-    const leftPanelX = 148;
-    const rightPanelX = viewportWidth - 148;
     const leftPanelHeight = 148;
     const rightPanelHeight = 164;
-    const rightPanelY = panelTop + (rightPanelHeight - leftPanelHeight) * 0.5;
-
+    const panelTop = mobile
+      ? safeArea.top + 12 + leftPanelHeight * hudScale * 0.5
+      : 84;
+    const leftPanelX = mobile
+      ? safeArea.left + 12 + sidePanelWidth * hudScale * 0.5
+      : 148;
+    const rightPanelX = mobile
+      ? portrait
+        ? leftPanelX
+        : viewportWidth - safeArea.right - 104 - sidePanelWidth * hudScale * 0.5
+      : viewportWidth - 148;
+    const rightPanelY = mobile
+      ? portrait
+        ? safeArea.top + 12 + leftPanelHeight * hudScale + 8 + rightPanelHeight * hudScale * 0.5
+        : panelTop
+      : panelTop + (rightPanelHeight - leftPanelHeight) * 0.5;
     this.leftPanel = this.trackComponent(
       createGlassPanel(scene, {
         x: leftPanelX,
@@ -94,6 +114,7 @@ export class UISystem {
         showTopAccent: false
       })
     );
+    this.leftPanel.root.setScale(hudScale);
     this.healthMeter = this.trackComponent(
       new UiMeter(scene, {
         x: 0,
@@ -176,12 +197,21 @@ export class UISystem {
     }).setOrigin(0, 0);
     this.rightPanel.content.add(this.profileValueText);
 
+    this.rightPanel.root.setScale(hudScale);
+
+    const powerUpPanelHeight = 136;
+    const powerUpPanelX = mobile && portrait ? leftPanelX : rightPanelX;
+    const powerUpPanelY = mobile
+      ? portrait
+        ? safeArea.top + 12 + (leftPanelHeight + rightPanelHeight) * hudScale + 16 + powerUpPanelHeight * hudScale * 0.5
+        : viewportHeight - safeArea.bottom - 10 - powerUpPanelHeight * hudScale * 0.5
+      : viewportHeight - 88;
     this.powerUpPanel = this.trackComponent(
       createGlassPanel(scene, {
-        x: rightPanelX,
-        y: viewportHeight - 88,
+        x: powerUpPanelX,
+        y: powerUpPanelY,
         width: sidePanelWidth,
-        height: 136,
+        height: powerUpPanelHeight,
         padding: sidePanelPadding,
         depth: UI_THEME.depth.hud,
         fillColor: UI_THEME.colors.panelStrong,
@@ -201,13 +231,18 @@ export class UISystem {
     );
     this.powerUpPanel.content.add(this.powerUpEmptyText);
     this.createPowerUpRows();
+    this.powerUpPanel.root.setScale(hudScale);
 
-    const bossPanelWidth = Math.min(380, viewportWidth - 80);
+    const bossPanelWidth = Math.max(220, Math.min(mobile ? 320 : 380, viewportWidth - safeArea.left - safeArea.right - 80));
     const bossPanelPadding = 22;
     this.bossPanel = this.trackComponent(
       createGlassPanel(scene, {
         x: viewportCenterX,
-        y: 46,
+        y: mobile && portrait
+          ? safeArea.top + 12 + (leftPanelHeight + rightPanelHeight) * hudScale + 20
+          : mobile
+            ? safeArea.top + 12 + 32
+            : 46,
         width: bossPanelWidth,
         height: 64,
         padding: bossPanelPadding,
@@ -249,8 +284,8 @@ export class UISystem {
     this.bossPanel.root.setVisible(false);
 
     this.bannerText = this.trackObject(
-      addUiText(scene, viewportCenterX, viewportHeight * 0.18, "", "sectionTitle", {
-        fontSize: "34px",
+      addUiText(scene, viewportCenterX, viewportHeight * (mobile ? 0.24 : 0.18), "", "sectionTitle", {
+        fontSize: mobile ? "26px" : "34px",
         fontStyle: "700",
         color: colorToHex(UI_THEME.colors.text),
         stroke: colorToHex(UI_THEME.colors.ink),
@@ -260,6 +295,19 @@ export class UISystem {
         .setDepth(UI_THEME.depth.banner)
         .setAlpha(0)
     );
+
+    if (mobile && portrait && viewportWidth <= 480) {
+      this.trackObject(
+        addUiText(scene, viewportCenterX, Math.min(viewportHeight - safeArea.bottom - 96, powerUpPanelY + 80), "Для лучшего опыта поверните устройство", "meta", {
+          align: "center",
+          color: colorToHex(UI_THEME.colors.textSoft),
+          wordWrap: { width: Math.max(220, viewportWidth - safeArea.left - safeArea.right - 48) }
+        })
+          .setOrigin(0.5, 0)
+          .setDepth(UI_THEME.depth.hud + 3)
+          .setAlpha(0.84)
+      );
+    }
 
     this.pauseOverlay = this.trackObject(createScreenOverlay(scene, UI_THEME.colors.shadow, 0.76, UI_THEME.depth.overlay));
     this.pauseOverlay.setVisible(false);

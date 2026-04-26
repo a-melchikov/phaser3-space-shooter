@@ -9,6 +9,7 @@ import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, formatHighscoreDate } from "../utils/helpers";
 import { GAME_TITLE } from "../utils/constants";
+import { getDeviceProfile, isMobileLayout } from "../utils/device";
 import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 import { UI_THEME, addUiText, colorToHex, fadeScaleIn, isCompactViewport } from "../ui/theme";
 import { UiButton, createAmbientOrb, createGlassPanel, type UiPanel } from "../ui/primitives";
@@ -126,15 +127,23 @@ export class GameOverScene extends Phaser.Scene {
     const viewportCenterX = getViewportCenterX(this);
     const viewportHeight = getViewportHeight(this);
     const viewportWidth = getViewportWidth(this);
-    const compact = isCompactViewport(this);
-    const cardWidth = Math.min(viewportWidth - 44, compact ? 472 : 560);
+    const deviceProfile = getDeviceProfile(this);
+    const mobile = isMobileLayout(this);
+    const compact = isCompactViewport(this) || mobile;
+    const safeArea = deviceProfile.safeArea;
+    const cardWidth = Math.min(viewportWidth - safeArea.left - safeArea.right - (mobile ? 28 : 44), compact ? 472 : 560);
+    const usableHeight = viewportHeight - safeArea.top - safeArea.bottom;
+    const titleY = safeArea.top + (mobile ? 44 : compact ? 68 : 82);
+    const summaryY = safeArea.top + usableHeight * (mobile ? 0.36 : compact ? 0.39 : 0.37);
+    const leaderboardY = safeArea.top + usableHeight * (mobile ? 0.67 : compact ? 0.705 : 0.675);
+    const buttonY = viewportHeight - safeArea.bottom - (mobile ? 54 : compact ? 66 : 60);
 
     this.trackObject(createAmbientOrb(this, viewportCenterX - 160, viewportHeight * 0.32, 260, 120, UI_THEME.colors.danger, 0.1, 2));
     this.trackObject(createAmbientOrb(this, viewportCenterX + 180, viewportHeight * 0.56, 320, 140, UI_THEME.colors.violet, 0.08, 2));
 
     const title = this.trackObject(
-      addUiText(this, viewportCenterX, compact ? 68 : 82, "Поражение", "heroTitle", {
-        fontSize: compact ? "36px" : "46px"
+      addUiText(this, viewportCenterX, titleY, "Поражение", "heroTitle", {
+        fontSize: mobile ? "34px" : compact ? "36px" : "46px"
       })
         .setOrigin(0.5)
         .setDepth(UI_THEME.depth.menu + 4)
@@ -143,7 +152,7 @@ export class GameOverScene extends Phaser.Scene {
     fadeScaleIn(this, title, { scaleFrom: 0.97, yOffset: 8 });
 
     const subtitle = this.trackObject(
-      addUiText(this, viewportCenterX, compact ? 106 : 122, GAME_TITLE, "bodySoft", {
+      addUiText(this, viewportCenterX, titleY + (mobile ? 34 : compact ? 38 : 40), GAME_TITLE, "bodySoft", {
         color: colorToHex(UI_THEME.colors.textSoft)
       })
         .setOrigin(0.5)
@@ -154,9 +163,9 @@ export class GameOverScene extends Phaser.Scene {
     const summaryPanel = this.trackComponent(
       createGlassPanel(this, {
         x: viewportCenterX,
-        y: viewportHeight * (compact ? 0.39 : 0.37),
+        y: summaryY,
         width: cardWidth,
-        height: 278,
+        height: mobile ? 250 : 278,
         depth: UI_THEME.depth.menu + 2,
         fillColor: UI_THEME.colors.panelStrong,
         fillAlpha: 0.88,
@@ -170,9 +179,9 @@ export class GameOverScene extends Phaser.Scene {
     const leaderboardPanel = this.trackComponent(
       createGlassPanel(this, {
         x: viewportCenterX,
-        y: viewportHeight * (compact ? 0.705 : 0.675),
+        y: leaderboardY,
         width: cardWidth,
-        height: compact ? 224 : 238,
+        height: mobile ? 198 : compact ? 224 : 238,
         depth: UI_THEME.depth.menu + 2,
         fillColor: UI_THEME.colors.panel,
         fillAlpha: 0.8,
@@ -185,10 +194,10 @@ export class GameOverScene extends Phaser.Scene {
 
     const restartButton = this.trackComponent(
       new UiButton(this, {
-        x: viewportCenterX - 106,
-        y: viewportHeight - (compact ? 66 : 60),
-        width: 184,
-        height: 44,
+        x: mobile ? viewportCenterX : viewportCenterX - 106,
+        y: mobile ? buttonY - 26 : buttonY,
+        width: mobile ? Math.min(280, cardWidth) : 184,
+        height: mobile ? 46 : 44,
         label: "Играть снова",
         variant: "primary",
         depth: UI_THEME.depth.menu + 5,
@@ -198,10 +207,10 @@ export class GameOverScene extends Phaser.Scene {
     );
     const menuButton = this.trackComponent(
       new UiButton(this, {
-        x: viewportCenterX + 106,
-        y: viewportHeight - (compact ? 66 : 60),
-        width: 184,
-        height: 40,
+        x: mobile ? viewportCenterX : viewportCenterX + 106,
+        y: mobile ? buttonY + 26 : buttonY,
+        width: mobile ? Math.min(280, cardWidth) : 184,
+        height: mobile ? 44 : 40,
         label: "Главное меню",
         variant: "ghost",
         depth: UI_THEME.depth.menu + 5,
@@ -212,13 +221,15 @@ export class GameOverScene extends Phaser.Scene {
     fadeScaleIn(this, restartButton.root, { delay: 150, scaleFrom: 0.99, yOffset: 6 });
     fadeScaleIn(this, menuButton.root, { delay: 170, scaleFrom: 0.99, yOffset: 6 });
 
-    this.trackObject(
+    if (!mobile) {
+      this.trackObject(
       addUiText(this, viewportCenterX, viewportHeight - 14, "R — заново   •   Esc — меню", "meta", {
         color: colorToHex(UI_THEME.colors.textMuted)
       })
         .setOrigin(0.5, 1)
         .setDepth(UI_THEME.depth.menu + 3)
-    );
+      );
+    }
   }
 
   private populateSummaryPanel(

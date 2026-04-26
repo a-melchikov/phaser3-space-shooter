@@ -11,7 +11,8 @@ import { SCENE_KEYS } from "../types/scene";
 import { MUSIC_KEYS, SFX_KEYS } from "../utils/audioKeys";
 import { buildSessionPresentation, formatHighscoreDate } from "../utils/helpers";
 import { GAME_TITLE } from "../utils/constants";
-import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
+import { getDeviceProfile, isMobileLayout } from "../utils/device";
+import { getViewportCenterX, getViewportCenterY, getViewportHeight, getViewportWidth } from "../utils/viewport";
 import { AudioSettingsPanel } from "../ui/audioPanel";
 import { UI_THEME, addUiText, colorToHex, fadeScaleIn, isCompactViewport } from "../ui/theme";
 import { UiButton, createAmbientOrb, createGlassPanel, createScreenOverlay, type UiPanel } from "../ui/primitives";
@@ -52,6 +53,7 @@ export class MenuScene extends Phaser.Scene {
   private pendingLeaderboardSessionKey?: string;
   private isLeaderboardLoading = false;
   private leaderboardRequestId = 0;
+  private shopPage = 0;
 
   public constructor() {
     super(SCENE_KEYS.MENU);
@@ -149,19 +151,25 @@ export class MenuScene extends Phaser.Scene {
     const viewportCenterX = getViewportCenterX(this);
     const viewportHeight = getViewportHeight(this);
     const viewportWidth = getViewportWidth(this);
-    const compact = isCompactViewport(this);
+    const deviceProfile = getDeviceProfile(this);
+    const mobile = isMobileLayout(this);
+    const portrait = deviceProfile.orientation === "portrait";
+    const compact = isCompactViewport(this) || mobile;
     const googleAvailable = getGameAppContext().authService.isGoogleLoginAvailable();
-    const panelWidth = Math.min(viewportWidth - 48, compact ? 468 : 586);
-    const actionPanelHeight = compact
-      ? (this.resumeMetadata ? 336 : 286)
-      : (this.resumeMetadata ? 372 : 320);
-    const leaderboardHeight = compact ? 178 : 226;
-    const footerHeight = compact ? 62 : 76;
-    const stackGap = compact ? 10 : 12;
-    const titleBlockHeight = compact ? 68 : 82;
-    const actionPanelLift = compact ? 14 : 20;
+    const safeArea = deviceProfile.safeArea;
+    const panelWidth = Math.min(viewportWidth - safeArea.left - safeArea.right - (mobile ? 28 : 48), mobile ? (portrait ? 420 : 540) : compact ? 468 : 586);
+    const actionPanelHeight = mobile
+      ? (this.resumeMetadata ? 382 : 336)
+      : compact
+        ? (this.resumeMetadata ? 336 : 286)
+        : (this.resumeMetadata ? 372 : 320);
+    const leaderboardHeight = mobile ? (portrait ? 178 : 164) : compact ? 178 : 226;
+    const footerHeight = mobile ? 74 : compact ? 62 : 76;
+    const stackGap = mobile ? 12 : compact ? 10 : 12;
+    const titleBlockHeight = mobile ? 74 : compact ? 68 : 82;
+    const actionPanelLift = mobile ? 8 : compact ? 14 : 20;
     const totalHeight = titleBlockHeight + actionPanelHeight + leaderboardHeight + footerHeight + stackGap * 3;
-    const startY = Math.max(compact ? 8 : 16, Math.round((viewportHeight - totalHeight) * 0.5) - (compact ? 10 : 12));
+    const startY = Math.max(safeArea.top + (mobile ? 10 : 16), Math.round((viewportHeight - safeArea.top - safeArea.bottom - totalHeight) * 0.5) + safeArea.top - (compact ? 10 : 12));
     const titleY = startY + (compact ? 8 : 10);
     const actionPanelY = startY + titleBlockHeight + stackGap + actionPanelHeight * 0.5 - actionPanelLift;
     const leaderboardY = actionPanelY + actionPanelHeight * 0.5 + stackGap + leaderboardHeight * 0.5 - actionPanelLift * 0.25;
@@ -272,17 +280,20 @@ export class MenuScene extends Phaser.Scene {
     compact: boolean,
     googleAvailable: boolean
   ): void {
-    const innerPadding = compact ? 28 : 34;
+    const mobile = isMobileLayout(this);
+    const innerPadding = mobile ? 24 : compact ? 28 : 34;
     const contentWidth = panelWidth - innerPadding * 2;
     const localWidth = contentWidth;
-    const actionWidth = Math.min(panelWidth - innerPadding * 2, compact ? 270 : 308);
+    const actionWidth = Math.min(panelWidth - innerPadding * 2, mobile ? 318 : compact ? 270 : 308);
     const secondaryLabel = this.resolveSecondaryActionLabel(googleAvailable);
     const hasResume = this.resumeMetadata !== null;
     const panelTop = panel.root.y - panelHeight * 0.5;
     const leftX = panel.root.x - panelWidth * 0.5 + innerPadding;
-    const actionBaseY = compact
-      ? (hasResume ? panel.root.y + 12 : panel.root.y + 8)
-      : (hasResume ? panel.root.y + 22 : panel.root.y + 16);
+    const actionBaseY = mobile
+      ? (hasResume ? panel.root.y - 4 : panel.root.y - 20)
+      : compact
+        ? (hasResume ? panel.root.y + 12 : panel.root.y + 8)
+        : (hasResume ? panel.root.y + 22 : panel.root.y + 16);
     const headerTop = 0;
     const nameTop = compact ? 26 : 30;
     const sublineTop = compact ? 58 : 66;
@@ -340,9 +351,9 @@ export class MenuScene extends Phaser.Scene {
       ? this.trackComponent(
         new UiButton(this, {
           x: panel.root.x,
-          y: actionBaseY - (compact ? 44 : 52),
+          y: actionBaseY - (mobile ? 56 : compact ? 44 : 52),
           width: actionWidth,
-          height: compact ? 54 : 58,
+          height: mobile ? 58 : compact ? 54 : 58,
           subtitle: this.resumeMetadata ? this.formatResumeButtonSubtitle(this.resumeMetadata) : undefined,
           label: "Продолжить",
           variant: "primary",
@@ -359,7 +370,7 @@ export class MenuScene extends Phaser.Scene {
         x: panel.root.x,
         y: actionBaseY + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
-        height: compact ? 42 : 46,
+        height: mobile ? 50 : compact ? 42 : 46,
         label: "Начать игру",
         variant: "primary",
         depth: UI_THEME.depth.menu + 6,
@@ -372,9 +383,9 @@ export class MenuScene extends Phaser.Scene {
     const secondaryButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY + (compact ? 42 : 50) + (hasResume ? (compact ? 12 : 14) : 0),
+        y: actionBaseY + (mobile ? 54 : compact ? 42 : 50) + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
-        height: compact ? 36 : 38,
+        height: mobile ? 46 : compact ? 36 : 38,
         label: secondaryLabel,
         variant: "secondary",
         depth: UI_THEME.depth.menu + 6,
@@ -394,9 +405,9 @@ export class MenuScene extends Phaser.Scene {
     const shopButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY + (compact ? 82 : 96) + (hasResume ? (compact ? 12 : 14) : 0),
+        y: actionBaseY + (mobile ? 106 : compact ? 82 : 96) + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
-        height: 34,
+        height: mobile ? 44 : 34,
         label: "Улучшения",
         variant: "secondary",
         depth: UI_THEME.depth.menu + 6,
@@ -409,9 +420,9 @@ export class MenuScene extends Phaser.Scene {
     const settingsButton = this.trackComponent(
       new UiButton(this, {
         x: panel.root.x,
-        y: actionBaseY + (compact ? 122 : 136) + (hasResume ? (compact ? 12 : 14) : 0),
+        y: actionBaseY + (mobile ? 156 : compact ? 122 : 136) + (hasResume ? (compact ? 12 : 14) : 0),
         width: actionWidth,
-        height: 32,
+        height: mobile ? 42 : 32,
         label: "Настройки звука",
         variant: "ghost",
         depth: UI_THEME.depth.menu + 6,
@@ -889,15 +900,19 @@ export class MenuScene extends Phaser.Scene {
 
   private populateControlsPanel(panel: UiPanel, panelWidth: number, compact: boolean): void {
     const contentWidth = panelWidth - (compact ? 32 : 40);
-    const columnWidth = contentWidth / 3;
+    const mobile = isMobileLayout(this);
     const keys = ["СТРЕЛКИ / WASD", "SPACE", "P / ESC"];
     const captions = ["движение", "выстрел", "пауза"];
 
-    for (let index = 0; index < 3; index += 1) {
+    const labels = mobile ? ["TOUCH", "AUTO", "PAUSE"] : keys;
+    const captionLabels = mobile ? ["РґРІРёР¶РµРЅРёРµ", "РѕРіРѕРЅСЊ", "РєРЅРѕРїРєР°"] : captions;
+    const columnWidth = contentWidth / labels.length;
+
+    for (let index = 0; index < labels.length; index += 1) {
       const centerX = columnWidth * index + columnWidth * 0.5;
       const dividerX = columnWidth * (index + 1);
 
-      if (index < 2) {
+      if (index < labels.length - 1) {
         const divider = this.add.graphics();
         divider.lineStyle(1, UI_THEME.colors.line, 0.08);
         divider.lineBetween(dividerX, compact ? 6 : 8, dividerX, compact ? 36 : 40);
@@ -905,18 +920,18 @@ export class MenuScene extends Phaser.Scene {
       }
 
       panel.content.add(
-        addUiText(this, centerX, compact ? 4 : 6, keys[index] ?? "", "label", {
+        addUiText(this, centerX, compact ? 4 : 6, labels[index] ?? "", "label", {
           color: colorToHex(index === 0 ? UI_THEME.colors.cyan : index === 1 ? UI_THEME.colors.text : UI_THEME.colors.lineSoft),
           align: "center",
-          fontSize: compact ? "16px" : "18px"
+          fontSize: mobile ? "17px" : compact ? "16px" : "18px"
         }).setOrigin(0.5, 0)
       );
 
       panel.content.add(
-        addUiText(this, centerX, compact ? 22 : 24, captions[index] ?? "", "meta", {
+        addUiText(this, centerX, compact ? 22 : 24, mobile ? (["move", "fire", "pause"][index] ?? "") : (captionLabels[index] ?? ""), "meta", {
           color: colorToHex(UI_THEME.colors.textMuted),
           align: "center",
-          fontSize: compact ? "11px" : "12px",
+          fontSize: mobile ? "12px" : compact ? "11px" : "12px",
           wordWrap: { width: columnWidth - 18 }
         }).setOrigin(0.5, 0)
       );
@@ -1012,6 +1027,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.closeSettingsOverlay();
+    this.shopPage = 0;
     this.isShopOpen = true;
     this.renderShopOverlay();
   }
@@ -1022,6 +1038,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.isShopOpen = false;
+    this.shopPage = 0;
     this.destroyShopOverlay();
   }
 
@@ -1062,13 +1079,16 @@ export class MenuScene extends Phaser.Scene {
 
     const viewportWidth = getViewportWidth(this);
     const viewportHeight = getViewportHeight(this);
-    const compact = isCompactViewport(this);
-    const panelWidth = Math.min(viewportWidth - 36, compact ? 520 : 880);
-    const panelHeight = Math.min(viewportHeight - 36, compact ? 470 : 456);
+    const deviceProfile = getDeviceProfile(this);
+    const mobile = isMobileLayout(this);
+    const compact = isCompactViewport(this) || mobile;
+    const safeArea = deviceProfile.safeArea;
+    const panelWidth = Math.min(viewportWidth - safeArea.left - safeArea.right - (mobile ? 24 : 36), compact ? 520 : 880);
+    const panelHeight = Math.min(viewportHeight - safeArea.top - safeArea.bottom - (mobile ? 24 : 36), mobile ? 540 : compact ? 470 : 456);
     const panel = this.trackShopOverlayComponent(
       createGlassPanel(this, {
         x: getViewportCenterX(this),
-        y: getViewportHeight(this) * 0.5,
+        y: safeArea.top + (viewportHeight - safeArea.top - safeArea.bottom) * 0.5,
         width: panelWidth,
         height: panelHeight,
         depth: UI_THEME.depth.overlayContent,
@@ -1096,12 +1116,16 @@ export class MenuScene extends Phaser.Scene {
 
     const items = this.economyProfile?.catalog ?? getGameAppContext().economyService.createGuestProfile().catalog;
     const columns = compact ? 1 : 3;
-    const cardGap = compact ? 8 : 12;
+    const cardGap = mobile ? 10 : compact ? 8 : 12;
     const cardWidth = (contentWidth - cardGap * (columns - 1)) / columns;
-    const cardHeight = compact ? 74 : 92;
+    const cardHeight = mobile ? 88 : compact ? 74 : 92;
     const startY = compact ? 72 : 76;
+    const itemsPerPage = mobile ? Math.max(3, Math.floor((panelHeight - startY - 82) / (cardHeight + cardGap))) : items.length;
+    const pageCount = Math.max(1, Math.ceil(items.length / itemsPerPage));
+    this.shopPage = Phaser.Math.Clamp(this.shopPage, 0, pageCount - 1);
+    const visibleItems = items.slice(this.shopPage * itemsPerPage, this.shopPage * itemsPerPage + itemsPerPage);
 
-    items.forEach((item, index) => {
+    visibleItems.forEach((item, index) => {
       const column = index % columns;
       const row = Math.floor(index / columns);
       this.renderUpgradeCard(
@@ -1115,12 +1139,54 @@ export class MenuScene extends Phaser.Scene {
       );
     });
 
+    if (mobile && pageCount > 1) {
+      const pagerY = getViewportCenterY(this) + panelHeight * 0.5 - 76;
+      const previousButton = this.trackShopOverlayComponent(
+        new UiButton(this, {
+          x: getViewportCenterX(this) - 76,
+          y: pagerY,
+          width: 132,
+          height: 40,
+          label: "РќР°Р·Р°Рґ",
+          variant: "ghost",
+          depth: UI_THEME.depth.overlayContent + 4,
+          audioSystem: this.audioSystem,
+          enabled: this.shopPage > 0,
+          onClick: () => {
+            this.shopPage = Math.max(0, this.shopPage - 1);
+            this.renderShopOverlay();
+          }
+        })
+      );
+      previousButton.setLabel("Prev");
+      const nextButton = this.trackShopOverlayComponent(
+        new UiButton(this, {
+          x: getViewportCenterX(this) + 76,
+          y: pagerY,
+          width: 132,
+          height: 40,
+          label: "Р”Р°Р»СЊС€Рµ",
+          variant: "secondary",
+          depth: UI_THEME.depth.overlayContent + 4,
+          audioSystem: this.audioSystem,
+          enabled: this.shopPage < pageCount - 1,
+          onClick: () => {
+            this.shopPage = Math.min(pageCount - 1, this.shopPage + 1);
+            this.renderShopOverlay();
+          }
+        })
+      );
+      nextButton.setLabel("Next");
+      fadeScaleIn(this, previousButton.root, { delay: 45, scaleFrom: 0.99, yOffset: 3 });
+      fadeScaleIn(this, nextButton.root, { delay: 45, scaleFrom: 0.99, yOffset: 3 });
+    }
+
     const closeButton = this.trackShopOverlayComponent(
       new UiButton(this, {
         x: getViewportCenterX(this),
-        y: getViewportHeight(this) * 0.5 + panelHeight * 0.5 - 30,
+        y: safeArea.top + (viewportHeight - safeArea.top - safeArea.bottom) * 0.5 + panelHeight * 0.5 - (mobile ? 30 : 30),
         width: 150,
-        height: 34,
+        height: mobile ? 42 : 34,
         label: "Закрыть",
         variant: "ghost",
         depth: UI_THEME.depth.overlayContent + 4,
@@ -1140,6 +1206,7 @@ export class MenuScene extends Phaser.Scene {
     height: number,
     compact: boolean
   ): void {
+    const mobile = isMobileLayout(this);
     const rarityColor = this.getRarityColor(item.rarity);
     const card = this.add.graphics();
     card.fillStyle(UI_THEME.colors.panel, 0.68);
@@ -1168,9 +1235,9 @@ export class MenuScene extends Phaser.Scene {
     const button = this.trackShopOverlayComponent(
       new UiButton(this, {
         x: panel.root.x + panel.content.x + x + width - 58,
-        y: panel.root.y + panel.content.y + y + height - 22,
-        width: 92,
-        height: 30,
+        y: panel.root.y + panel.content.y + y + height - (mobile ? 26 : 22),
+        width: mobile ? 104 : 92,
+        height: mobile ? 38 : 30,
         label: item.nextCost === null ? "MAX" : `${item.nextCost}`,
         variant: item.canPurchase ? "success" : "ghost",
         depth: UI_THEME.depth.overlayContent + 5,
@@ -1603,6 +1670,7 @@ export class MenuScene extends Phaser.Scene {
     this.isAuthBusy = false;
     this.isSettingsOpen = false;
     this.isShopOpen = false;
+    this.shopPage = 0;
     this.isEconomyLoading = false;
     this.economyProfile = null;
     this.economyMessage = "";
