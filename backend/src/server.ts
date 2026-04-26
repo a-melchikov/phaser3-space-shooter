@@ -12,7 +12,13 @@ async function start(): Promise<void> {
       port: env.PORT
     });
 
-    app.log.info(`Leaderboard backend is running on port ${env.PORT}.`);
+    app.log.info(
+      {
+        port: env.PORT,
+        environment: env.NODE_ENV
+      },
+      "Leaderboard backend started."
+    );
   } catch (error) {
     app.log.error(error, "Failed to start leaderboard backend.");
     process.exit(1);
