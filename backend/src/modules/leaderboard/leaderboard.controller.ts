@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 import { AppError } from "../../utils/errors.js";
 import { validateWithSchema } from "../../utils/validation.js";
+import type { AuditService } from "../audit/audit.service.js";
 
 import type { LeaderboardService } from "./leaderboard.service.js";
 import {
@@ -14,7 +15,10 @@ import {
 const LEADERBOARD_TOP_CACHE_CONTROL = "public, max-age=5, stale-while-revalidate=30";
 
 export class LeaderboardController {
-  public constructor(private readonly leaderboardService: LeaderboardService) {}
+  public constructor(
+    private readonly leaderboardService: LeaderboardService,
+    private readonly auditService: AuditService
+  ) {}
 
   public submitScore = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!request.user) {
@@ -23,6 +27,22 @@ export class LeaderboardController {
 
     const payload = validateWithSchema(submitScoreSchema, request.body);
     const result = await this.leaderboardService.submitScore(request.user, payload);
+
+    await this.auditService.tryRecordFromRequest(request, {
+      eventType: "ranked_submit_accepted",
+      category: "leaderboard",
+      actorType: "authenticated",
+      playerId: request.user.playerId,
+      firebaseUid: request.user.firebaseUid,
+      source: "backend",
+      status: "success",
+      metadata: {
+        score: payload.score,
+        wave: payload.wave,
+        improvedBest: result.improvedBest,
+        rank: result.rank
+      }
+    });
 
     await reply.code(201).send({
       accepted: result.accepted,

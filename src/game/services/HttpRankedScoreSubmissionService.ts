@@ -6,12 +6,14 @@ import {
   BackendLeaderboardClient,
   BackendLeaderboardClientError
 } from "./BackendLeaderboardClient";
+import type { AuditService } from "./AuditService";
 import type { RankedScoreSubmissionService } from "./RankedScoreSubmissionService";
 
 export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionService {
   public constructor(
     private readonly authService: AuthService,
-    private readonly backendLeaderboardClient: BackendLeaderboardClient
+    private readonly backendLeaderboardClient: BackendLeaderboardClient,
+    private readonly auditService: AuditService
   ) {}
 
   public async submitScore(
@@ -28,6 +30,8 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
     const idToken = await this.authService.getIdToken();
 
     if (!idToken) {
+      this.auditService.recordRankedSubmitRejected("missing_token", result, _session);
+
       return {
         status: "failed",
         message: "Не удалось подтвердить вход для отправки результата."
@@ -51,6 +55,20 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
       };
     } catch (error) {
       if (error instanceof BackendLeaderboardClientError) {
+        if (error.statusCode === 401 || error.statusCode === 400) {
+          this.auditService.recordRankedSubmitRejected("backend_rejected", result, _session, {
+            status: String(error.statusCode),
+            code: error.code
+          });
+        }
+
+        if (error.statusCode === 503 && error.code === "ranked_submissions_disabled") {
+          this.auditService.recordRankedSubmitRejected("ranked_unavailable", result, _session, {
+            status: String(error.statusCode),
+            code: error.code
+          });
+        }
+
         if (error.statusCode === 401) {
           return {
             status: "failed",

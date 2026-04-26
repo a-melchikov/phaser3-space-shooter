@@ -18,8 +18,8 @@ export async function leaderboardRoutes(
   options: LeaderboardRoutesOptions
 ): Promise<void> {
   const leaderboardService = new LeaderboardService(fastify.prisma);
-  const controller = new LeaderboardController(leaderboardService);
-  const authenticate = authenticateRequest(options.authService);
+  const controller = new LeaderboardController(leaderboardService, fastify.audit);
+  const authenticate = authenticateRequest(options.authService, fastify.audit);
   const readRateLimitConfig = {
     config: {
       rateLimit: {
@@ -30,7 +30,19 @@ export async function leaderboardRoutes(
   } as const;
   const submitScoreHandler = options.env.RANKED_SUBMISSIONS_ENABLED
     ? controller.submitScore
-    : async () => {
+    : async (request: Parameters<typeof controller.submitScore>[0]) => {
+        await fastify.audit.tryRecordFromRequest(request, {
+          eventType: "ranked_submit_rejected",
+          category: "leaderboard",
+          actorType: request.user ? "authenticated" : "unknown",
+          playerId: request.user?.playerId,
+          firebaseUid: request.user?.firebaseUid,
+          source: "backend",
+          status: "rejected",
+          metadata: {
+            reason: "ranked_submissions_disabled"
+          }
+        });
         throw new AppError(
           503,
           "ranked_submissions_disabled",
