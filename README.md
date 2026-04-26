@@ -126,11 +126,62 @@ Google login на клиенте полезен как:
 
 ## Управление
 
-- `Стрелки` — движение
+Desktop:
+
+- `Стрелки` / `WASD` — движение
 - `Space` — стрельба
 - `Esc` / `P` — пауза
 - `R` — рестарт после поражения
 - `Esc` — возврат в меню с экрана `Game Over`
+
+Mobile:
+
+- удерживайте палец на игровом поле, чтобы корабль плавно следовал за целевой точкой
+- отпустите палец, чтобы корабль остановился на текущей позиции
+- базовая стрельба работает автоматически с тем же cooldown и текущими power-up эффектами
+- кнопка `Pause` находится в безопасной верхней области экрана
+- portrait и landscape поддерживаются; в узком portrait показывается мягкая подсказка повернуть устройство
+
+Mobile input is isolated in `src/game/input/`: `GameScene` consumes normalized input state, while keyboard, touch-follow movement, and mobile buttons clean up their own listeners on shutdown.
+
+## Mobile tuning
+
+Mobile combat tuning lives in [src/game/config/mobile.ts](./src/game/config/mobile.ts).
+
+Current mobile-only defaults:
+
+- `enemyScaleMultiplier = 0.9`
+- `enemySpeedMultiplier = 0.9`
+- `enemyBulletSpeedMultiplier = 0.92`
+- `enemySpawnPressureMultiplier = 0.94`
+- `enemyCapMultiplier = 0.92`
+- `playerHitboxMultiplier = 0.88`
+- `touchFollowMaxSpeed = 640`
+- `touchFollowResponsiveness = 13`
+- `touchFollowStopDistance = 8`
+
+Desktop balance uses `DEFAULT_COMBAT_TUNING` and is unchanged. To disable mobile balance while keeping touch controls, make `resolveCombatTuning(true)` return `DEFAULT_COMBAT_TUNING`, or tune only the multipliers you want to keep.
+
+## PWA / installable app
+
+The production build includes a web app manifest and service worker through `vite-plugin-pwa`.
+
+- manifest: generated at `/manifest.webmanifest`
+- service worker: generated during `npm run build`
+- display mode: `standalone`
+- start URL and scope: `/`
+- app icons: `public/icons/`
+- cached shell/assets: built JS/CSS/HTML, generated icons, font, and audio files
+- API/auth/leaderboard/economy/audit responses are not runtime-cached
+
+Install check:
+
+1. Run `npm run build`.
+2. Run `npm run preview`.
+3. Open the preview URL on Android Chrome or desktop Chrome devtools mobile emulation.
+4. Confirm `/manifest.webmanifest` and the generated service worker are available.
+5. Use the browser install prompt; after install, the app should open in standalone mode.
+6. Toggle offline in devtools and reload: the cached frontend shell should load, while backend-dependent UI falls back gracefully.
 
 ## Локальный запуск
 
