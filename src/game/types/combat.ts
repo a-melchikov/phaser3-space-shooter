@@ -127,6 +127,18 @@ export interface FireProjectileOptions {
   };
 }
 
+export interface CombatTuning {
+  enemyScaleMultiplier: number;
+  enemySpeedMultiplier: number;
+  enemyBulletSpeedMultiplier: number;
+  enemySpawnPressureMultiplier: number;
+  enemyCapMultiplier: number;
+  playerHitboxMultiplier: number;
+  touchFollowMaxSpeed: number;
+  touchFollowResponsiveness: number;
+  touchFollowStopDistance: number;
+}
+
 export interface EnemyDefinition {
   id: EnemyArchetypeId;
   role: EnemyRole;
