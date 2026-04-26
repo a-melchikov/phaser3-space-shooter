@@ -4,11 +4,13 @@ import { PlayerBullet } from "./PlayerBullet";
 import type { SavedPlayerState, SavedPowerUpState } from "../types/runState";
 import type { ActivePowerUpState } from "../types/game";
 import type { PlayerCombatSnapshot, PowerUpType } from "../types/combat";
+import type { RunUpgradeEffects } from "../types/economy";
 import {
   PLAYER_CONFIG,
   POWER_UP_DURATIONS_MS,
   POWER_UP_LABELS
 } from "../config/combat";
+import { DEFAULT_RUN_UPGRADE_EFFECTS } from "../config/upgrades";
 import { TEXTURE_KEYS } from "../utils/constants";
 import { getPlayerSpawnX, getPlayerSpawnY } from "../utils/viewport";
 
@@ -34,12 +36,15 @@ export interface PlayerDamageResult {
   gameOver: boolean;
 }
 
+export type SupportDroneMode = "none" | "permanent" | "powerUp";
+
 export class Player extends Phaser.Physics.Arcade.Image {
-  public readonly maxHealth: number = PLAYER_CONFIG.maxHealth;
+  public maxHealth: number = PLAYER_CONFIG.maxHealth;
   public health: number = PLAYER_CONFIG.maxHealth;
   public lives: number = PLAYER_CONFIG.startingLives;
 
   private readonly shieldRing: Phaser.GameObjects.Image;
+  private upgradeEffects: RunUpgradeEffects = DEFAULT_RUN_UPGRADE_EFFECTS;
   private fireReadyAt = 0;
   private invulnerableUntil = 0;
   private shieldUntil = 0;
@@ -67,10 +72,17 @@ export class Player extends Phaser.Physics.Arcade.Image {
       .setDepth(9);
   }
 
+  public setUpgradeEffects(effects: RunUpgradeEffects): void {
+    this.upgradeEffects = effects;
+    this.maxHealth = PLAYER_CONFIG.maxHealth + effects.maxHealthBonus;
+    this.health = Math.min(this.health, this.maxHealth);
+  }
+
   public resetForRun(time = 0): void {
     this.enableBody(true, getPlayerSpawnX(this.scene), getPlayerSpawnY(this.scene), true, true);
     this.setVelocity(0, 0);
-    this.health = PLAYER_CONFIG.maxHealth;
+    this.maxHealth = PLAYER_CONFIG.maxHealth + this.upgradeEffects.maxHealthBonus;
+    this.health = this.maxHealth;
     this.lives = PLAYER_CONFIG.startingLives;
     this.fireReadyAt = time;
     this.invulnerableUntil = 0;
@@ -144,7 +156,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
       return { blocked: false, lostLife: true, gameOver: true };
     }
 
-    this.health = PLAYER_CONFIG.maxHealth;
+    this.health = this.maxHealth;
     this.invulnerableUntil = time + PLAYER_CONFIG.respawnInvulnerabilityMs;
     this.setPosition(getPlayerSpawnX(this.scene), getPlayerSpawnY(this.scene));
     this.setVelocity(0, 0);
@@ -154,7 +166,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
 
   public applyPowerUp(type: PowerUpType, time: number): void {
     if (type === "heal") {
-      this.health = Math.min(this.maxHealth, this.health + 30);
+      this.health = Math.min(this.maxHealth, this.health + 30 + this.upgradeEffects.healBonus);
       return;
     }
 
@@ -176,6 +188,19 @@ export class Player extends Phaser.Physics.Arcade.Image {
     this.supportDroneUntil = this.extendPowerUpDuration(this.supportDroneUntil, POWER_UP_DURATIONS_MS.supportDrone, time);
   }
 
+  public grantTimedPowerUp(type: Exclude<PowerUpType, "heal" | "damageBoost" | "supportDrone">, durationMs: number, time: number): void {
+    if (durationMs <= 0) {
+      return;
+    }
+
+    if (type === "doubleShot") {
+      this.doubleShotUntil = Math.max(this.doubleShotUntil, time) + durationMs;
+      return;
+    }
+
+    this.shieldUntil = Math.max(this.shieldUntil, time) + durationMs;
+  }
+
   public isInvulnerable(time: number): boolean {
     return time < this.invulnerableUntil;
   }
@@ -193,13 +218,29 @@ export class Player extends Phaser.Physics.Arcade.Image {
   }
 
   public hasSupportDrone(time: number): boolean {
+    return this.upgradeEffects.permanentSupportDrone || this.hasTemporarySupportDrone(time);
+  }
+
+  public hasTemporarySupportDrone(time: number): boolean {
     return time < this.supportDroneUntil;
+  }
+
+  public getSupportDroneMode(time: number): SupportDroneMode {
+    if (this.hasTemporarySupportDrone(time)) {
+      return "powerUp";
+    }
+
+    return this.upgradeEffects.permanentSupportDrone ? "permanent" : "none";
+  }
+
+  public getUpgradeEffects(): RunUpgradeEffects {
+    return this.upgradeEffects;
   }
 
   public getBulletDamage(time: number): number {
     return this.hasDamageBoost(time)
-      ? PLAYER_CONFIG.bulletDamage * PLAYER_CONFIG.damageBoostMultiplier
-      : PLAYER_CONFIG.bulletDamage;
+      ? PLAYER_CONFIG.bulletDamage * this.upgradeEffects.bulletDamageMultiplier * PLAYER_CONFIG.damageBoostMultiplier
+      : PLAYER_CONFIG.bulletDamage * this.upgradeEffects.bulletDamageMultiplier;
   }
 
   public getCombatSnapshot(): PlayerCombatSnapshot {
@@ -231,7 +272,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
       nextIndex += 1;
     }
 
-    if (this.hasSupportDrone(time)) {
+    if (this.hasTemporarySupportDrone(time)) {
       this.writeActivePowerUp(target, nextIndex, "supportDrone", this.supportDroneUntil - time);
       nextIndex += 1;
     }
@@ -309,7 +350,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
   }
 
   private extendPowerUpDuration(currentUntil: number, durationMs: number, time: number): number {
-    return Math.max(currentUntil, time) + durationMs;
+    return Math.max(currentUntil, time) + durationMs * this.upgradeEffects.powerUpDurationMultiplier;
   }
 
   private writeActivePowerUp(
@@ -331,7 +372,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
   }
 
   private fire(time: number, bullets: Phaser.Physics.Arcade.Group): void {
-    this.fireReadyAt = time + PLAYER_CONFIG.fireCooldownMs;
+    this.fireReadyAt = time + PLAYER_CONFIG.fireCooldownMs * this.upgradeEffects.fireCooldownMultiplier;
     const offsets = this.hasDoubleShot(time) ? [-11, 11] : [0];
     const damage = this.getBulletDamage(time);
 

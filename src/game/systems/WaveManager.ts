@@ -197,6 +197,10 @@ export class WaveManager {
   }
 
   private advanceWave(): void {
+    if (this.currentPlan) {
+      this.callbacks.onWaveCompleted?.(this.currentPlan);
+    }
+
     const nextWave = this.currentWave + 1;
     const nextPlan = this.planner.createPlan(nextWave);
 

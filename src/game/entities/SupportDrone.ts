@@ -50,7 +50,9 @@ export class SupportDrone extends Phaser.GameObjects.Image {
       return;
     }
 
-    const target = this.findNearestTarget(enemies, bosses, this.x, this.y);
+    const effects = player.getUpgradeEffects();
+    const mode = player.getSupportDroneMode(time);
+    const target = this.findNearestTarget(enemies, bosses, this.x, this.y, effects.supportDroneBossPriority);
     if (!target) {
       return;
     }
@@ -62,24 +64,28 @@ export class SupportDrone extends Phaser.GameObjects.Image {
 
     const angle = Phaser.Math.Angle.Between(this.x, this.y, target.x, target.y);
     const speed = PLAYER_CONFIG.bulletSpeed * 0.92;
+    const damage = mode === "powerUp" ? PLAYER_CONFIG.supportDroneDamage : effects.supportDroneDamage;
     bullet.fire(this.x, this.y, {
       velocityX: Math.cos(angle) * speed,
       velocityY: Math.sin(angle) * speed,
-      damage: PLAYER_CONFIG.supportDroneDamage,
+      damage,
       tint: 0x79f7c1,
       scaleX: 0.72,
       scaleY: 0.92,
       angle: angle + Math.PI * 0.5
     });
 
-    this.nextFireAt = time + PLAYER_CONFIG.supportDroneFireCooldownMs;
+    this.nextFireAt = time + (mode === "powerUp"
+      ? PLAYER_CONFIG.supportDroneFireCooldownMs
+      : effects.supportDroneFireCooldownMs);
   }
 
   private findNearestTarget(
     enemies: Phaser.Physics.Arcade.Group,
     bosses: Phaser.Physics.Arcade.Group,
     x: number,
-    y: number
+    y: number,
+    bossPriority: boolean
   ): Enemy | Boss | null {
     let bestTarget: Enemy | Boss | null = null;
     let bestDistance = Number.POSITIVE_INFINITY;
@@ -88,6 +94,12 @@ export class SupportDrone extends Phaser.GameObjects.Image {
       const boss = gameObject as Boss;
       if (!boss?.active) {
         return true;
+      }
+
+      if (bossPriority) {
+        bestTarget = boss;
+        bestDistance = 0;
+        return false;
       }
 
       const distance = Phaser.Math.Distance.Between(x, y, boss.x, boss.y);

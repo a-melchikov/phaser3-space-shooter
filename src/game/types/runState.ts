@@ -1,7 +1,8 @@
 import type { BossId, PlannedEnemySpawn, PowerUpType, SpawnBatch, WaveKind, WavePlan } from "./combat";
+import type { EconomyRunStartState, RunEconomyProgressState } from "./economy";
 import type { SessionPresentation } from "./game";
 
-export const RUN_STATE_SAVE_VERSION = 2;
+export const RUN_STATE_SAVE_VERSION = 3;
 
 export type RunPhase = "playing" | "paused" | "transition";
 
@@ -71,6 +72,8 @@ export interface RunSnapshot {
   boss: SavedBossState;
   waveProgress: SavedWaveProgressState | null;
   session: SessionPresentation;
+  economyRun?: EconomyRunStartState;
+  economyProgress?: RunEconomyProgressState;
 }
 
 export interface SavedRunState {

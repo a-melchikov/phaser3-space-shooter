@@ -38,6 +38,7 @@ export class UISystem {
   private readonly waveValueText: Phaser.GameObjects.Text;
   private readonly statusValueText: Phaser.GameObjects.Text;
   private readonly profileValueText: Phaser.GameObjects.Text;
+  private readonly shardsValueText: Phaser.GameObjects.Text;
   private readonly powerUpEmptyText: Phaser.GameObjects.Text;
   private readonly powerUpRows: PowerUpRow[] = [];
   private readonly powerUpBuffer: ActivePowerUpState[] = [];
@@ -76,7 +77,7 @@ export class UISystem {
     const sidePanelPadding = 22;
     const leftPanelX = 148;
     const rightPanelX = viewportWidth - 148;
-    const leftPanelHeight = 124;
+    const leftPanelHeight = 148;
     const rightPanelHeight = 164;
     const rightPanelY = panelTop + (rightPanelHeight - leftPanelHeight) * 0.5;
 
@@ -123,6 +124,17 @@ export class UISystem {
       color: colorToHex(UI_THEME.colors.warning)
     }).setOrigin(0, 0);
     this.leftPanel.content.add(this.scoreValueText);
+
+    this.leftPanel.content.add(
+      addUiText(scene, 0, 102, "Осколки", "meta", {
+        color: colorToHex(UI_THEME.colors.textSoft)
+      }).setOrigin(0, 0)
+    );
+    this.shardsValueText = addUiText(scene, 118, 102, "+0", "metric", {
+      fontSize: "16px",
+      color: colorToHex(UI_THEME.colors.cyan)
+    }).setOrigin(0, 0);
+    this.leftPanel.content.add(this.shardsValueText);
 
     this.rightPanel = this.trackComponent(
       createGlassPanel(scene, {
@@ -370,6 +382,10 @@ export class UISystem {
   public setScore(score: number): void {
     this.score = score;
     this.scoreValueText.setText(String(score));
+  }
+
+  public setShardsEstimate(value: number): void {
+    this.shardsValueText.setText(`+${Math.max(0, Math.floor(value))}`);
   }
 
   public setWave(wave: number): void {

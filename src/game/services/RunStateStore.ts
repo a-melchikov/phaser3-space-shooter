@@ -1,5 +1,13 @@
 import { GAME_BUILD_VERSION } from "../config/build";
+import { DEFAULT_RUN_UPGRADE_EFFECTS } from "../config/upgrades";
 import type { BossId, EnemyArchetypeId, EnemyRole, EnemyVariant, PlannedEnemySpawn, PowerUpType, ProgressionStage, SpawnBatch, WaveKind, WavePlan, WaveThemeId } from "../types/combat";
+import {
+  ECONOMY_UPGRADE_KEYS,
+  type EconomyRunStartState,
+  type EconomyUpgradeKey,
+  type RunEconomyProgressState,
+  type RunUpgradeEffects
+} from "../types/economy";
 import type {
   ResumeMetadata,
   RunSnapshot,
@@ -161,7 +169,9 @@ function isRunSnapshot(value: unknown): value is RunSnapshot {
       isSavedPlayerState(value.player) &&
       isSavedBossState(value.boss) &&
       (value.waveProgress === null || isSavedWaveProgressState(value.waveProgress)) &&
-      isSessionPresentation(value.session)
+      isSessionPresentation(value.session) &&
+      (value.economyRun === undefined || isEconomyRunStartState(value.economyRun)) &&
+      (value.economyProgress === undefined || isRunEconomyProgressState(value.economyProgress))
     );
 }
 
@@ -402,6 +412,84 @@ function isRunPhase(value: unknown): value is RunSnapshot["phase"] {
 
 function isWaveKind(value: unknown): value is WaveKind {
   return value === "normal" || value === "elite" || value === "boss";
+}
+
+function isEconomyRunStartState(value: unknown): value is EconomyRunStartState {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.runId === "string" &&
+    value.runId.length >= 16 &&
+    isEconomyUpgradeLevelMap(value.upgrades) &&
+    isRunUpgradeEffects(value.effects)
+  );
+}
+
+function isEconomyUpgradeLevelMap(value: unknown): value is Record<EconomyUpgradeKey, number> {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return ECONOMY_UPGRADE_KEYS.every((key) => isNonNegativeInteger(value[key]));
+}
+
+function isRunUpgradeEffects(value: unknown): value is RunUpgradeEffects {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return Object.keys(DEFAULT_RUN_UPGRADE_EFFECTS).every((key) => {
+    const expectedValue = DEFAULT_RUN_UPGRADE_EFFECTS[key as keyof RunUpgradeEffects];
+    const actualValue = value[key];
+
+    return typeof expectedValue === "boolean"
+      ? typeof actualValue === "boolean"
+      : isFiniteNumber(actualValue);
+  });
+}
+
+function isRunEconomyProgressState(value: unknown): value is RunEconomyProgressState {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    isFiniteNumber(value.startedAtOffsetMs) &&
+    value.startedAtOffsetMs >= 0 &&
+    isNonNegativeInteger(value.commonKills) &&
+    isNonNegativeInteger(value.eliteKills) &&
+    isNonNegativeInteger(value.deathlessStreak) &&
+    isWaveNumberArray(value.bossKillWaves) &&
+    isWaveNumberArray(value.noDamageWaves) &&
+    isWaveNumberArray(value.highHpWaves) &&
+    isWaveNumberArray(value.bossNoLifeLossWaves) &&
+    isWaveNumberArray(value.deathlessStreakMilestones) &&
+    Array.isArray(value.waveStates) &&
+    value.waveStates.length <= 240 &&
+    value.waveStates.every((entry) => isRunEconomyWaveState(entry))
+  );
+}
+
+function isRunEconomyWaveState(value: unknown): value is RunEconomyProgressState["waveStates"][number] {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    isPositiveInteger(value.wave) &&
+    isWaveKind(value.kind) &&
+    typeof value.tookDamage === "boolean" &&
+    typeof value.lostLife === "boolean" &&
+    typeof value.completed === "boolean"
+  );
+}
+
+function isWaveNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value)
+    && value.length <= 240
+    && value.every((entry) => isPositiveInteger(entry));
 }
 
 function isProgressionStage(value: unknown): value is ProgressionStage {

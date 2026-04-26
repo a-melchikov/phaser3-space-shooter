@@ -14,12 +14,15 @@ import { AudioSystem } from "../systems/AudioSystem";
 import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import { CollisionManager } from "../systems/CollisionManager";
 import { CombatDirector } from "../systems/CombatDirector";
+import { RunEconomyTracker } from "../systems/RunEconomyTracker";
 import { TelegraphSystem } from "../systems/TelegraphSystem";
 import { UISystem } from "../systems/UISystem";
 import { WaveManager } from "../systems/WaveManager";
 import { RunAutosaveController } from "../services/RunAutosaveController";
+import { DEFAULT_RUN_UPGRADE_EFFECTS } from "../config/upgrades";
 import type { EnemyType, GameStartPayload, SessionPresentation, WaveManagerCallbacks } from "../types/game";
 import type { PowerUpType, WavePlan } from "../types/combat";
+import type { EconomyRunStartState, RunUpgradeEffects } from "../types/economy";
 import type {
   RunPhase,
   RunSnapshot,
@@ -87,6 +90,9 @@ export class GameScene extends Phaser.Scene {
   private isRestoringRun = false;
   private rankedSubmissionAllowed = true;
   private completionSession!: UserSession;
+  private economyRun?: EconomyRunStartState;
+  private runUpgradeEffects: RunUpgradeEffects = DEFAULT_RUN_UPGRADE_EFFECTS;
+  private economyTracker!: RunEconomyTracker;
 
   public constructor() {
     super(SCENE_KEYS.GAME);
@@ -104,6 +110,8 @@ export class GameScene extends Phaser.Scene {
     this.gameOverTimeoutId = undefined;
     this.runSession = runSession;
     this.pendingSavedRun = data.savedRun;
+    this.economyRun = data.savedRun?.run.economyRun ?? data.economyRun;
+    this.runUpgradeEffects = this.economyRun?.effects ?? DEFAULT_RUN_UPGRADE_EFFECTS;
     this.isRestoringRun = false;
     this.rankedSubmissionAllowed = data.source !== "resume";
     this.completionSession = this.rankedSubmissionAllowed
@@ -123,6 +131,7 @@ export class GameScene extends Phaser.Scene {
 
     this.audioSystem = AudioSystem.getInstance(this);
     this.audioSystem.playMusic(MUSIC_KEYS.GAMEPLAY);
+    this.economyTracker = new RunEconomyTracker(this.time.now);
 
     this.createBackground();
     this.createGroups();
@@ -146,6 +155,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.uiSystem.bindPlayer(this.player);
     this.uiSystem.setScore(this.score);
+    this.uiSystem.setShardsEstimate(0);
     this.uiSystem.setWave(1);
     this.uiSystem.setPowerUps([]);
     this.uiSystem.setBossHealth(0, 0);
@@ -175,11 +185,13 @@ export class GameScene extends Phaser.Scene {
     const callbacks: WaveManagerCallbacks = {
       onWaveChanged: (plan) => {
         this.combatDirector.setWaveContext(plan);
+        this.economyTracker.startWave(plan);
         this.uiSystem.setWave(plan.wave);
         this.uiSystem.setBossHealth(0, 0);
         this.audioSystem.playSfx(SFX_KEYS.WAVE_START);
         this.audioSystem.playMusic(plan.kind === "boss" ? MUSIC_KEYS.BOSS : MUSIC_KEYS.GAMEPLAY);
         if (!this.isRestoringRun) {
+          this.applyWaveStartUpgrades(plan);
           this.requestAutosave(true);
         }
 
@@ -190,6 +202,10 @@ export class GameScene extends Phaser.Scene {
         if (plan.kind === "boss" && !this.isRestoringRun) {
           getGameAppContext().auditService.recordBossWaveStarted(plan.wave, this.score);
         }
+      },
+      onWaveCompleted: (plan) => {
+        this.economyTracker.completeWave(plan, this.player.health, this.player.maxHealth);
+        this.refreshShardEstimate();
       },
       onTransitionStateChange: (active) => {
         this.isTransitioning = active;
@@ -277,6 +293,12 @@ export class GameScene extends Phaser.Scene {
 
     this.score = snapshot.score;
     this.runSession = snapshot.session;
+    this.economyRun = snapshot.economyRun;
+    this.runUpgradeEffects = this.economyRun?.effects ?? DEFAULT_RUN_UPGRADE_EFFECTS;
+    if (snapshot.economyProgress) {
+      this.economyTracker.restoreState(this.time.now, snapshot.economyProgress);
+    }
+    this.player.setUpgradeEffects(this.runUpgradeEffects);
     this.uiSystem.setScore(this.score);
     this.uiSystem.setSessionStatus(this.runSession);
     this.isRestoringRun = true;
@@ -332,7 +354,9 @@ export class GameScene extends Phaser.Scene {
       player: this.player.capturePersistentState(this.time.now),
       boss: bossState,
       waveProgress,
-      session: this.runSession
+      session: this.runSession,
+      economyRun: this.economyRun,
+      economyProgress: this.economyTracker.captureState(this.time.now)
     };
   }
 
@@ -418,6 +442,7 @@ export class GameScene extends Phaser.Scene {
 
   private createPlayer(): void {
     this.player = new Player(this);
+    this.player.setUpgradeEffects(this.runUpgradeEffects);
     this.player.resetForRun(this.time.now);
     this.player.on(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
     this.supportDrone = new SupportDrone(this);
@@ -665,6 +690,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.economyTracker.recordPlayerDamage(this.waveManager.getCurrentWave(), result.lostLife);
     this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
     this.spawnImpact(this.player.x, this.player.y, UI_COLORS.danger);
     this.cameras.main.shake(120, CAMERA_SHAKE_LIGHT);
@@ -687,6 +713,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.economyTracker.recordPlayerDamage(this.waveManager.getCurrentWave(), result.lostLife);
     this.destroyEnemy(enemy, false);
     this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
     this.cameras.main.shake(150, CAMERA_SHAKE_LIGHT);
@@ -705,6 +732,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.economyTracker.recordPlayerDamage(this.waveManager.getCurrentWave(), result.lostLife);
     this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
     this.cameras.main.shake(160, CAMERA_SHAKE_LIGHT);
 
@@ -726,6 +754,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.economyTracker.recordPlayerDamage(this.waveManager.getCurrentWave(), result.lostLife);
     mine.deactivate();
     this.audioSystem.playSfx(SFX_KEYS.PLAYER_HURT);
     this.spawnBurst(this.player.x, this.player.y, UI_COLORS.danger, 8);
@@ -763,6 +792,8 @@ export class GameScene extends Phaser.Scene {
 
     if (awardScore) {
       this.addScore(enemy.scoreValue);
+      this.economyTracker.recordEnemyKilled(enemy.role);
+      this.refreshShardEstimate();
       if (!enemy.isBossAdd()) {
         this.tryDropPowerUp(enemyType, x, y);
       }
@@ -786,6 +817,8 @@ export class GameScene extends Phaser.Scene {
     this.activeBoss = undefined;
     this.clearEnemyProjectiles();
     this.addScore(SCORE_VALUES.bossKill);
+    this.economyTracker.recordBossKilled(this.waveManager.getCurrentWave());
+    this.refreshShardEstimate();
     this.dropPowerUp("boss", x, y);
     this.uiSystem.setBossHealth(0, 0);
     this.spawnBurst(x, y, UI_COLORS.gold, 26);
@@ -795,7 +828,7 @@ export class GameScene extends Phaser.Scene {
 
   private tryDropPowerUp(source: EnemyType, x: number, y: number): void {
     const dropBonus = this.waveManager.getCurrentPlan()?.dropBonus ?? 0;
-    const probability = Math.min(0.8, POWER_UP_DROP_CHANCE[source] + dropBonus);
+    const probability = Math.min(0.8, POWER_UP_DROP_CHANCE[source] + dropBonus + this.runUpgradeEffects.dropChanceBonus);
 
     if (!chance(probability)) {
       return;
@@ -819,6 +852,28 @@ export class GameScene extends Phaser.Scene {
     this.score += amount;
     this.uiSystem.setScore(this.score);
     this.requestAutosave();
+  }
+
+  private applyWaveStartUpgrades(plan: WavePlan): void {
+    if (this.runUpgradeEffects.waveStartDoubleShotMs > 0) {
+      this.player.grantTimedPowerUp("doubleShot", this.runUpgradeEffects.waveStartDoubleShotMs, this.time.now);
+    }
+
+    if (plan.kind === "boss" && this.runUpgradeEffects.bossWaveShieldMs > 0) {
+      this.player.grantTimedPowerUp("shield", this.runUpgradeEffects.bossWaveShieldMs, this.time.now);
+    }
+  }
+
+  private refreshShardEstimate(): void {
+    this.uiSystem.setShardsEstimate(this.economyTracker.estimateReward(this.waveManager.getCurrentWave()));
+  }
+
+  private createLocalEconomyRunId(): string {
+    if (typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+
+    return `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, "0")}`;
   }
 
   private clearProjectiles(): void {
@@ -878,11 +933,23 @@ export class GameScene extends Phaser.Scene {
 
     this.gameOverTimeoutId = window.setTimeout(() => {
       this.gameOverTimeoutId = undefined;
+      const runId = this.economyRun?.runId ?? this.createLocalEconomyRunId();
+      const economySummary = this.economyTracker.createSummary(
+        runId,
+        this.score,
+        this.waveManager.getCurrentWave(),
+        this.time.now
+      );
       this.scene.start(SCENE_KEYS.GAME_OVER, {
         score: this.score,
         wave: this.waveManager.getCurrentWave(),
         session: this.completionSession,
-        rankedSubmissionAllowed: this.rankedSubmissionAllowed
+        rankedSubmissionAllowed: this.rankedSubmissionAllowed,
+        economy: {
+          summary: economySummary,
+          estimatedReward: this.economyTracker.estimateReward(this.waveManager.getCurrentWave()),
+          authenticated: Boolean(this.economyRun)
+        }
       });
     }, 650);
   }
@@ -1019,6 +1086,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.uiSystem.bindPlayer(this.player);
     this.uiSystem.setScore(this.score);
+    this.refreshShardEstimate();
     this.uiSystem.setWave(this.waveManager?.getCurrentWave() ?? 1);
     this.uiSystem.setPowerUps(this.player?.active ? this.player.getActivePowerUps(this.time.now) : []);
     this.uiSystem.setBossHealth(this.activeBoss?.health ?? 0, this.activeBoss?.maxHealth ?? 0);
@@ -1181,5 +1249,8 @@ export class GameScene extends Phaser.Scene {
     this.pendingSavedRun = undefined;
     this.rankedSubmissionAllowed = true;
     this.completionSession = undefined as unknown as UserSession;
+    this.economyRun = undefined;
+    this.runUpgradeEffects = DEFAULT_RUN_UPGRADE_EFFECTS;
+    this.economyTracker = undefined as unknown as RunEconomyTracker;
   }
 }

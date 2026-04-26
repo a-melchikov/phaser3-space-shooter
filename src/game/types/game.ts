@@ -16,6 +16,7 @@ import type {
   WavePlan,
   WaveThemeId
 } from "./combat";
+import type { EconomyRunStartState, GameOverEconomyPayload } from "./economy";
 import type { SavedRunState } from "./runState";
 
 export type EnemyType = EnemyArchetypeId;
@@ -60,6 +61,7 @@ export interface GameStartPayload {
   source?: "menu" | "gameover" | "resume";
   session: SessionPresentation;
   savedRun?: SavedRunState;
+  economyRun?: EconomyRunStartState;
 }
 
 export interface GameOverPayload {
@@ -67,6 +69,7 @@ export interface GameOverPayload {
   wave: number;
   session: UserSession;
   rankedSubmissionAllowed: boolean;
+  economy?: GameOverEconomyPayload;
 }
 
 export interface CompletedRunResult {
@@ -74,6 +77,7 @@ export interface CompletedRunResult {
   wave: number;
   completedAt: string;
   rankedSubmissionAllowed: boolean;
+  economyRunId?: string;
 }
 
 export interface RankedScorePayload extends CompletedRunResult {
@@ -148,6 +152,7 @@ export interface ActivePowerUpState {
 
 export interface WaveManagerCallbacks {
   onWaveChanged: (plan: WavePlan) => void;
+  onWaveCompleted?: (plan: WavePlan) => void;
   onTransitionStateChange: (active: boolean) => void;
   onBanner: (text: string) => void;
   spawnBatch: (plan: WavePlan, batch: SpawnBatch) => SpawnBatch | null;
