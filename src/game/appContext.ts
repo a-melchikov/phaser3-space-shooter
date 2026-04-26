@@ -1,10 +1,12 @@
 import type { AuthService } from "../auth/AuthService";
+import type { AuditService } from "./services/AuditService";
 import type { OnlineLeaderboardService } from "./services/OnlineLeaderboardService";
 import type { ResultsService } from "./services/ResultsService";
 import type { RunStateStore } from "./services/RunStateStore";
 
 export interface GameAppContext {
   authService: AuthService;
+  auditService: AuditService;
   onlineLeaderboardService: OnlineLeaderboardService;
   resultsService: ResultsService;
   runStateStore: RunStateStore;

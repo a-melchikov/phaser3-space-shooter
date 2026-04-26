@@ -109,6 +109,7 @@ export class GameScene extends Phaser.Scene {
     this.completionSession = this.rankedSubmissionAllowed
       ? getGameAppContext().authService.getSession()
       : this.buildLocalOnlySession(runSession);
+    getGameAppContext().auditService.recordGameRunStart(data);
   }
 
   public create(): void {
@@ -184,6 +185,10 @@ export class GameScene extends Phaser.Scene {
 
         if (plan.kind !== "normal") {
           this.uiSystem.showBanner(`${plan.bannerText} • ${plan.subtitle}`);
+        }
+
+        if (plan.kind === "boss" && !this.isRestoringRun) {
+          getGameAppContext().auditService.recordBossWaveStarted(plan.wave, this.score);
         }
       },
       onTransitionStateChange: (active) => {
