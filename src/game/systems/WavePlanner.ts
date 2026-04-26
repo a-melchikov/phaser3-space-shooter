@@ -1,8 +1,11 @@
 import { BOSS_REPEAT_START_WAVE, BOSS_TRANSITION_MS, WAVE_TRANSITION_MS, getProgressionStageConfig, isBossWave, isEliteWave } from "../config/combat";
+import { DEFAULT_COMBAT_TUNING } from "../config/mobile";
 import { ENEMY_BUDGET_COSTS, getEnemyRole } from "../config/enemies";
 import { BOSS_ORDER, FIXED_WAVE_THEMES, LATE_WAVE_THEME_ROTATION, WAVE_THEME_TEMPLATES } from "../config/waves";
 import type {
   BossId,
+  CombatCaps,
+  CombatTuning,
   EnemyArchetypeId,
   EnemyVariant,
   PlannedEnemySpawn,
@@ -26,6 +29,8 @@ const ELITE_WAVE_WEIGHT_BONUS: Partial<Record<EnemyArchetypeId, number>> = {
 export class WavePlanner {
   private previousLateTheme: WaveThemeId | undefined;
 
+  public constructor(private readonly tuning: CombatTuning = DEFAULT_COMBAT_TUNING) {}
+
   public createPlan(wave: number): WavePlan {
     const stageConfig = getProgressionStageConfig(wave);
 
@@ -45,7 +50,7 @@ export class WavePlanner {
       theme,
       bannerText: kind === "elite" ? `Волна ${wave} • элита` : `Волна ${wave}`,
       subtitle: template.label,
-      caps: stageConfig.caps,
+      caps: this.tuneCaps(stageConfig.caps),
       dropBonus: stageConfig.dropBonus,
       spawnBatches,
       bossCycle: 0
@@ -66,7 +71,7 @@ export class WavePlanner {
       theme: "bossEncounter",
       bannerText: `Волна ${wave} • босс`,
       subtitle: this.getBossSubtitle(bossId, repeatCycle),
-      caps: stageConfig.caps,
+      caps: this.tuneCaps(stageConfig.caps),
       dropBonus: stageConfig.dropBonus,
       spawnBatches: [],
       bossId,
@@ -177,7 +182,34 @@ export class WavePlanner {
   ): number {
     const baseBudget = stageConfig.budgetBase + (wave - stageConfig.minWave) * stageConfig.budgetPerWave;
     const eliteBonus = kind === "elite" ? 2.5 : 0;
-    return baseBudget * template.budgetMultiplier + eliteBonus;
+    return (baseBudget * template.budgetMultiplier + eliteBonus) * this.tuning.enemySpawnPressureMultiplier;
+  }
+
+  private tuneCaps(caps: CombatCaps): CombatCaps {
+    if (this.tuning.enemyCapMultiplier === 1) {
+      return caps;
+    }
+
+    return {
+      maxActiveEnemies: this.tuneCap(caps.maxActiveEnemies, 1),
+      maxEnemyBullets: this.tuneCap(caps.maxEnemyBullets, 8),
+      maxMines: this.tuneCap(caps.maxMines, 0),
+      maxEliteEnemies: this.tuneCap(caps.maxEliteEnemies, 0),
+      maxSnipers: this.tuneCap(caps.maxSnipers, 0),
+      maxTurrets: this.tuneCap(caps.maxTurrets, 0),
+      maxBossAdds: this.tuneCap(caps.maxBossAdds, 0),
+      globalMaxEnemies: this.tuneCap(caps.globalMaxEnemies, 1),
+      globalMaxEnemyBullets: this.tuneCap(caps.globalMaxEnemyBullets, 8),
+      globalMaxMines: this.tuneCap(caps.globalMaxMines, 0)
+    };
+  }
+
+  private tuneCap(value: number, minimum: number): number {
+    if (value <= 0) {
+      return 0;
+    }
+
+    return Math.max(minimum, Math.floor(value * this.tuning.enemyCapMultiplier));
   }
 
   private pickWeightedEnemy(

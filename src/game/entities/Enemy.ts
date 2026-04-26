@@ -1,8 +1,9 @@
 import Phaser from "phaser";
 
 import { getProgressionStageConfig } from "../config/combat";
+import { DEFAULT_COMBAT_TUNING } from "../config/mobile";
 import { ENEMY_DEFINITIONS, getEnemyStageHealthMultiplier } from "../config/enemies";
-import type { EnemyArchetypeId, EnemyRole, EnemyVariant, PlannedEnemySpawn, ProgressionStage } from "../types/combat";
+import type { CombatTuning, EnemyArchetypeId, EnemyRole, EnemyVariant, PlannedEnemySpawn, ProgressionStage } from "../types/combat";
 import type { SavedEnemyState } from "../types/runState";
 import { randomBetween } from "../utils/helpers";
 import { getViewportHeight, getViewportWidth } from "../utils/viewport";
@@ -22,6 +23,7 @@ interface EnemySpawnOptions {
   time: number;
   director: CombatDirector;
   telegraphs: TelegraphSystem;
+  tuning?: CombatTuning;
 }
 
 type ChargeState = "idle" | "charging" | "dashing";
@@ -72,6 +74,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
   private currentWave = 1;
   private director?: CombatDirector;
   private telegraphs?: TelegraphSystem;
+  private tuning: CombatTuning = DEFAULT_COMBAT_TUNING;
   private spawnSource: "wave" | "boss" = "wave";
   private plannedSpawn: PlannedEnemySpawn = {
     archetype: "basic",
@@ -133,6 +136,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     this.spawnedAt = options.time;
     this.director = options.director;
     this.telegraphs = options.telegraphs;
+    this.tuning = options.tuning ?? DEFAULT_COMBAT_TUNING;
     this.spawnSource = options.spawn.source;
     this.baseX = options.x;
     this.anchorX = options.x;
@@ -160,9 +164,22 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
 
     this.enableBody(true, options.x, options.y, true, true);
     this.setTexture(definition.textureKey);
-    this.setDisplaySize(definition.width, definition.height);
-    body.setSize(definition.width * 0.74, definition.height * 0.74, true);
-    body.setVelocity(0, (definition.baseSpeed + stageIndex * definition.speedPerStage) * stageConfig.enemySpeedMultiplier * variantModifiers.speed);
+    this.setDisplaySize(
+      definition.width * this.tuning.enemyScaleMultiplier,
+      definition.height * this.tuning.enemyScaleMultiplier
+    );
+    body.setSize(
+      definition.width * 0.74 * this.tuning.enemyScaleMultiplier,
+      definition.height * 0.74 * this.tuning.enemyScaleMultiplier,
+      true
+    );
+    body.setVelocity(
+      0,
+      (definition.baseSpeed + stageIndex * definition.speedPerStage) *
+        stageConfig.enemySpeedMultiplier *
+        variantModifiers.speed *
+        this.tuning.enemySpeedMultiplier
+    );
     this.setRotation(0);
     this.setScale(1);
     this.applyBaseTint();
@@ -310,12 +327,12 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
 
     if (this.y < (definition.preferredY ?? 118)) {
       body.setVelocity(
-        Phaser.Math.Clamp((this.anchorX - this.x) * 1.5, -72, 72),
+        Phaser.Math.Clamp((this.anchorX - this.x) * 1.5, -this.tuneSpeed(72), this.tuneSpeed(72)),
         body.velocity.y
       );
     } else {
-      body.setVelocityY(26);
-      body.setVelocityX((definition.strafeSpeed ?? 84) * this.moveDirection);
+      body.setVelocityY(this.tuneSpeed(26));
+      body.setVelocityX(this.tuneSpeed(definition.strafeSpeed ?? 84) * this.moveDirection);
 
       const minX = this.displayWidth * 0.5 + 36;
       const maxX = getViewportWidth(this.scene) - this.displayWidth * 0.5 - 36;
@@ -360,7 +377,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     if (this.chargeState === "dashing") {
       if (time >= this.dashEndsAt) {
         this.chargeState = "idle";
-        body.setVelocity(0, definition.baseSpeed * 0.8);
+        body.setVelocity(0, this.tuneSpeed(definition.baseSpeed * 0.8));
       }
       return;
     }
@@ -368,7 +385,8 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     if (this.chargeState === "charging") {
       body.setVelocity(0, 0);
       if (time >= this.chargeUntil) {
-        body.setVelocity(Math.cos(this.dashAngle) * (definition.dashSpeed ?? 430), Math.sin(this.dashAngle) * (definition.dashSpeed ?? 430));
+        const dashSpeed = this.tuneSpeed(definition.dashSpeed ?? 430);
+        body.setVelocity(Math.cos(this.dashAngle) * dashSpeed, Math.sin(this.dashAngle) * dashSpeed);
         this.chargeState = "dashing";
         this.dashEndsAt = time + 720;
         this.clearTelegraph();
@@ -376,8 +394,12 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
       return;
     }
 
-    body.setVelocityX(Phaser.Math.Clamp((player.x - this.x) * 1.35, -definition.baseSpeed * 0.9, definition.baseSpeed * 0.9));
-    body.setVelocityY(definition.baseSpeed);
+    body.setVelocityX(Phaser.Math.Clamp(
+      (player.x - this.x) * 1.35,
+      -this.tuneSpeed(definition.baseSpeed * 0.9),
+      this.tuneSpeed(definition.baseSpeed * 0.9)
+    ));
+    body.setVelocityY(this.tuneSpeed(definition.baseSpeed));
 
     if (this.y >= Math.min(player.y - 110, getViewportHeight(this.scene) * 0.55)) {
       const target = this.predictPlayer(player, 110);
@@ -415,8 +437,12 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
 
     if (this.y < anchorY) {
       body.setVelocity(
-        Phaser.Math.Clamp((this.anchorX - this.x) * 1.6, -definition.baseSpeed, definition.baseSpeed),
-        Math.max(body.velocity.y, definition.baseSpeed * 0.85)
+        Phaser.Math.Clamp(
+          (this.anchorX - this.x) * 1.6,
+          -this.tuneSpeed(definition.baseSpeed),
+          this.tuneSpeed(definition.baseSpeed)
+        ),
+        Math.max(body.velocity.y, this.tuneSpeed(definition.baseSpeed * 0.85))
       );
       return;
     }
@@ -481,7 +507,7 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
     const body = this.body as Phaser.Physics.Arcade.Body;
 
     body.setVelocityX(Math.sin((time - this.spawnedAt) * 0.0015) * 34);
-    body.setVelocityY(Math.min(body.velocity.y, definition.baseSpeed * 0.9));
+    body.setVelocityY(Math.min(body.velocity.y, this.tuneSpeed(definition.baseSpeed * 0.9)));
 
     if (!this.isInFireLane() || time < this.nextShotAt) {
       return;
@@ -577,6 +603,10 @@ export class Enemy extends Phaser.Physics.Arcade.Image {
   private clearTelegraph(): void {
     this.activeTelegraph?.destroy();
     this.activeTelegraph = undefined;
+  }
+
+  private tuneSpeed(value: number): number {
+    return value * this.tuning.enemySpeedMultiplier;
   }
 
   private getStageIndex(stage: ProgressionStage): number {

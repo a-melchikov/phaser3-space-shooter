@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 
 import { BOSS_DEFINITIONS } from "../config/bosses";
-import type { BossId, BossPhaseId, PlayerCombatSnapshot, WavePlan } from "../types/combat";
+import { DEFAULT_COMBAT_TUNING } from "../config/mobile";
+import type { BossId, BossPhaseId, CombatTuning, PlayerCombatSnapshot, WavePlan } from "../types/combat";
 import type { SavedBossState } from "../types/runState";
 import { getSpawnLaneX } from "../utils/enemyFactory";
 import { getViewportHeight, getViewportWidth } from "../utils/viewport";
@@ -16,6 +17,7 @@ interface BossSpawnOptions {
   plan: WavePlan;
   director: CombatDirector;
   telegraphs: TelegraphSystem;
+  tuning?: CombatTuning;
 }
 
 export interface BossDamageResult {
@@ -55,6 +57,7 @@ export class Boss extends Phaser.Physics.Arcade.Image {
   private spawnedAt = 0;
   private director?: CombatDirector;
   private telegraphs?: TelegraphSystem;
+  private tuning: CombatTuning = DEFAULT_COMBAT_TUNING;
   private movementSpeed = 120;
   private attackCooldownMs = 1300;
   private nextActionAt = 0;
@@ -103,12 +106,13 @@ export class Boss extends Phaser.Physics.Arcade.Image {
     this.bossId = definition.id;
     this.director = options.director;
     this.telegraphs = options.telegraphs;
+    this.tuning = options.tuning ?? DEFAULT_COMBAT_TUNING;
     this.bossCycle = options.plan.bossCycle;
     this.spawnedAt = this.scene.time.now;
     this.maxHealth = definition.baseHealth * healthMultiplier;
     this.health = this.maxHealth;
     this.contactDamage = definition.contactDamage;
-    this.movementSpeed = definition.moveSpeed * speedMultiplier;
+    this.movementSpeed = definition.moveSpeed * speedMultiplier * this.tuning.enemySpeedMultiplier;
     this.attackCooldownMs = BOSS_ATTACK_COOLDOWNS[definition.id] * cooldownMultiplier;
     this.phase = "phase1";
     this.isEntering = true;
@@ -133,9 +137,16 @@ export class Boss extends Phaser.Physics.Arcade.Image {
 
     this.enableBody(true, getViewportWidth(this.scene) * 0.5, -definition.height, true, true);
     this.setTexture(definition.textureKey);
-    this.setDisplaySize(definition.width, definition.height);
-    body.setSize(definition.width * 0.8, definition.height * 0.72, true);
-    body.setVelocity(0, definition.enterSpeed);
+    this.setDisplaySize(
+      definition.width * this.tuning.enemyScaleMultiplier,
+      definition.height * this.tuning.enemyScaleMultiplier
+    );
+    body.setSize(
+      definition.width * 0.8 * this.tuning.enemyScaleMultiplier,
+      definition.height * 0.72 * this.tuning.enemyScaleMultiplier,
+      true
+    );
+    body.setVelocity(0, definition.enterSpeed * this.tuning.enemySpeedMultiplier);
     this.clearTint();
   }
 
@@ -262,27 +273,27 @@ export class Boss extends Phaser.Physics.Arcade.Image {
     }
 
     if (this.bossId === "bulwarkHowitzer") {
-      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * 0.8) * 230, minX, maxX);
+      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * this.tuneMotion(0.8)) * 230, minX, maxX);
       return;
     }
 
     if (this.bossId === "blinkReaver") {
-      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * 1.5) * 260, minX, maxX);
+      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * this.tuneMotion(1.5)) * 260, minX, maxX);
       return;
     }
 
     if (this.bossId === "broodCarrier") {
-      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * 0.9) * 190, minX, maxX);
-      this.y = BOSS_DEFINITIONS[this.bossId].targetY + Math.sin((time - this.spawnedAt) * 0.001 * 1.3) * 10;
+      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * this.tuneMotion(0.9)) * 190, minX, maxX);
+      this.y = BOSS_DEFINITIONS[this.bossId].targetY + Math.sin((time - this.spawnedAt) * 0.001 * this.tuneMotion(1.3)) * 10;
       return;
     }
 
     if (this.bossId === "prismBeamArray") {
-      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * 1.05) * 210, minX, maxX);
+      this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * this.tuneMotion(1.05)) * 210, minX, maxX);
       return;
     }
 
-    this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * 0.7) * 160, minX, maxX);
+    this.x = Phaser.Math.Clamp(this.baseCenterX + Math.sin((time - this.spawnedAt) * 0.001 * this.tuneMotion(0.7)) * 160, minX, maxX);
   }
 
   private updateShieldState(time: number): void {
@@ -698,5 +709,9 @@ export class Boss extends Phaser.Physics.Arcade.Image {
     }
 
     return this.attackCooldownMs;
+  }
+
+  private tuneMotion(value: number): number {
+    return value * this.tuning.enemySpeedMultiplier;
   }
 }

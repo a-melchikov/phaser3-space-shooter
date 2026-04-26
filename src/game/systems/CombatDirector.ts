@@ -1,10 +1,11 @@
 import Phaser from "phaser";
 
+import { DEFAULT_COMBAT_TUNING } from "../config/mobile";
 import { ENEMY_DEFINITIONS } from "../config/enemies";
 import { Enemy } from "../entities/Enemy";
 import { EnemyBullet } from "../entities/EnemyBullet";
 import { Mine } from "../entities/Mine";
-import type { FireProjectileOptions, PlannedEnemySpawn, SpawnBatch, VectorLike, WavePlan } from "../types/combat";
+import type { CombatTuning, FireProjectileOptions, PlannedEnemySpawn, SpawnBatch, VectorLike, WavePlan } from "../types/combat";
 import { getSpawnLaneX, getSpawnY } from "../utils/enemyFactory";
 import { getViewportWidth } from "../utils/viewport";
 import { TelegraphSystem } from "./TelegraphSystem";
@@ -16,6 +17,7 @@ interface CombatDirectorOptions {
   mines: Phaser.Physics.Arcade.Group;
   getPlayerSnapshot: () => { x: number; y: number; velocityX: number; velocityY: number };
   telegraphs: TelegraphSystem;
+  tuning?: CombatTuning;
   onEnemySpawn?: (enemy: Enemy) => void;
 }
 
@@ -50,6 +52,10 @@ export class CombatDirector {
 
   public getTelegraphSystem(): TelegraphSystem {
     return this.options.telegraphs;
+  }
+
+  public getCombatTuning(): CombatTuning {
+    return this.options.tuning ?? DEFAULT_COMBAT_TUNING;
   }
 
   public spawnPlannedBatch(plan: WavePlan, batch: SpawnBatch): SpawnBatch | null {
@@ -100,7 +106,12 @@ export class CombatDirector {
       return null;
     }
 
-    bullet.fire(options.x, options.y, options);
+    const tuning = this.getCombatTuning();
+    bullet.fire(options.x, options.y, {
+      ...options,
+      velocityX: options.velocityX * tuning.enemyBulletSpeedMultiplier,
+      velocityY: options.velocityY * tuning.enemyBulletSpeedMultiplier
+    });
     return bullet;
   }
 
@@ -230,7 +241,12 @@ export class CombatDirector {
     }
 
     const definition = ENEMY_DEFINITIONS[spawn.archetype];
-    const x = getSpawnLaneX(getViewportWidth(this.options.scene), spawn.lane, definition.width * 0.5);
+    const tuning = this.getCombatTuning();
+    const x = getSpawnLaneX(
+      getViewportWidth(this.options.scene),
+      spawn.lane,
+      definition.width * tuning.enemyScaleMultiplier * 0.5
+    );
     const y = getSpawnY();
 
     enemy.spawn({
@@ -241,7 +257,8 @@ export class CombatDirector {
       y,
       time: this.options.scene.time.now,
       director: this,
-      telegraphs: this.options.telegraphs
+      telegraphs: this.options.telegraphs,
+      tuning
     });
     this.options.onEnemySpawn?.(enemy);
 
