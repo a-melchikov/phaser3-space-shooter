@@ -3,32 +3,22 @@ import Phaser from "phaser";
 import { PlayerBullet } from "./PlayerBullet";
 import type { SavedPlayerState, SavedPowerUpState } from "../types/runState";
 import type { ActivePowerUpState } from "../types/game";
-import type { PlayerCombatSnapshot, PowerUpType } from "../types/combat";
+import type { CombatTuning, PlayerCombatSnapshot, PowerUpType } from "../types/combat";
 import type { RunUpgradeEffects } from "../types/economy";
+import type { PlayerInputState } from "../input/inputTypes";
 import {
   PLAYER_CONFIG,
   POWER_UP_DURATIONS_MS,
   POWER_UP_LABELS
 } from "../config/combat";
+import { DEFAULT_COMBAT_TUNING } from "../config/mobile";
 import { DEFAULT_RUN_UPGRADE_EFFECTS } from "../config/upgrades";
 import { TEXTURE_KEYS } from "../utils/constants";
-import { getPlayerSpawnX, getPlayerSpawnY } from "../utils/viewport";
+import { getPlayerSpawnX, getPlayerSpawnY, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
 export const PLAYER_EVENTS = {
   FIRED: "player-fired"
 } as const;
-
-export interface PlayerControls {
-  left: Phaser.Input.Keyboard.Key;
-  right: Phaser.Input.Keyboard.Key;
-  up: Phaser.Input.Keyboard.Key;
-  down: Phaser.Input.Keyboard.Key;
-  fire: Phaser.Input.Keyboard.Key;
-  leftAlt?: Phaser.Input.Keyboard.Key;
-  rightAlt?: Phaser.Input.Keyboard.Key;
-  upAlt?: Phaser.Input.Keyboard.Key;
-  downAlt?: Phaser.Input.Keyboard.Key;
-}
 
 export interface PlayerDamageResult {
   blocked: boolean;
@@ -45,6 +35,7 @@ export class Player extends Phaser.Physics.Arcade.Image {
 
   private readonly shieldRing: Phaser.GameObjects.Image;
   private upgradeEffects: RunUpgradeEffects = DEFAULT_RUN_UPGRADE_EFFECTS;
+  private combatTuning: CombatTuning = DEFAULT_COMBAT_TUNING;
   private fireReadyAt = 0;
   private invulnerableUntil = 0;
   private shieldUntil = 0;
@@ -61,9 +52,9 @@ export class Player extends Phaser.Physics.Arcade.Image {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
     body.setCollideWorldBounds(true);
-    body.setSize(26, 34, true);
 
     this.setDisplaySize(PLAYER_CONFIG.width, PLAYER_CONFIG.height);
+    this.applyBodySize();
     this.setDepth(10);
 
     this.shieldRing = scene.add
@@ -76,6 +67,11 @@ export class Player extends Phaser.Physics.Arcade.Image {
     this.upgradeEffects = effects;
     this.maxHealth = PLAYER_CONFIG.maxHealth + effects.maxHealthBonus;
     this.health = Math.min(this.health, this.maxHealth);
+  }
+
+  public setCombatTuning(tuning: CombatTuning): void {
+    this.combatTuning = tuning;
+    this.applyBodySize();
   }
 
   public resetForRun(time = 0): void {
@@ -97,41 +93,16 @@ export class Player extends Phaser.Physics.Arcade.Image {
 
   public updateState(
     time: number,
-    controls: PlayerControls,
+    inputState: PlayerInputState,
     bullets: Phaser.Physics.Arcade.Group
   ): void {
     if (!this.active) {
       return;
     }
 
-    let velocityX = 0;
-    let velocityY = 0;
+    this.applyMovement(inputState);
 
-    if (controls.left.isDown || controls.leftAlt?.isDown) {
-      velocityX -= 1;
-    }
-    if (controls.right.isDown || controls.rightAlt?.isDown) {
-      velocityX += 1;
-    }
-    if (controls.up.isDown || controls.upAlt?.isDown) {
-      velocityY -= 1;
-    }
-    if (controls.down.isDown || controls.downAlt?.isDown) {
-      velocityY += 1;
-    }
-
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    const movementLengthSq = velocityX * velocityX + velocityY * velocityY;
-
-    if (movementLengthSq > 0) {
-      const movementScale = PLAYER_CONFIG.speed / Math.sqrt(movementLengthSq);
-      velocityX *= movementScale;
-      velocityY *= movementScale;
-    }
-
-    body.setVelocity(velocityX, velocityY);
-
-    if (controls.fire.isDown && time >= this.fireReadyAt) {
+    if (inputState.firePressed && time >= this.fireReadyAt) {
       this.fire(time, bullets);
     }
 
@@ -369,6 +340,70 @@ export class Player extends Phaser.Physics.Arcade.Image {
     entry.label = POWER_UP_LABELS[type];
     entry.remainingMs = remainingMs;
     target[index] = entry;
+  }
+
+  private applyMovement(inputState: PlayerInputState): void {
+    if (inputState.movement.hasTarget) {
+      this.applyTouchFollowMovement(inputState);
+      return;
+    }
+
+    this.applyAxisMovement(inputState.movement.axisX, inputState.movement.axisY);
+  }
+
+  private applyAxisMovement(axisX: number, axisY: number): void {
+    let velocityX = axisX;
+    let velocityY = axisY;
+    const movementLengthSq = velocityX * velocityX + velocityY * velocityY;
+
+    if (movementLengthSq > 0) {
+      const movementScale = PLAYER_CONFIG.speed / Math.sqrt(movementLengthSq);
+      velocityX *= movementScale;
+      velocityY *= movementScale;
+    }
+
+    (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
+  }
+
+  private applyTouchFollowMovement(inputState: PlayerInputState): void {
+    const targetX = Phaser.Math.Clamp(
+      inputState.movement.targetX,
+      this.displayWidth * 0.5,
+      getViewportWidth(this.scene) - this.displayWidth * 0.5
+    );
+    const targetY = Phaser.Math.Clamp(
+      inputState.movement.targetY,
+      this.displayHeight * 0.5,
+      getViewportHeight(this.scene) - this.displayHeight * 0.5
+    );
+    const deltaX = targetX - this.x;
+    const deltaY = targetY - this.y;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    if (distance <= this.combatTuning.touchFollowStopDistance) {
+      (this.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+      return;
+    }
+
+    const speed = Math.min(
+      this.combatTuning.touchFollowMaxSpeed,
+      distance * this.combatTuning.touchFollowResponsiveness
+    );
+    const scale = speed / distance;
+    (this.body as Phaser.Physics.Arcade.Body).setVelocity(deltaX * scale, deltaY * scale);
+  }
+
+  private applyBodySize(): void {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) {
+      return;
+    }
+
+    body.setSize(
+      26 * this.combatTuning.playerHitboxMultiplier,
+      34 * this.combatTuning.playerHitboxMultiplier,
+      true
+    );
   }
 
   private fire(time: number, bullets: Phaser.Physics.Arcade.Group): void {

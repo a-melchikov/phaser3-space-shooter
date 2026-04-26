@@ -24,6 +24,9 @@ export function createGameConfig(parent: string | HTMLElement): Phaser.Types.Cor
       pixelArt: false,
       roundPixels: false
     },
+    input: {
+      activePointers: 3
+    },
     physics: {
       default: "arcade",
       arcade: {

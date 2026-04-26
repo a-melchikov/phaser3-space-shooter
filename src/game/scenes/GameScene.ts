@@ -6,10 +6,14 @@ import { BOSS_EVENTS, Boss } from "../entities/Boss";
 import { ENEMY_EVENTS, Enemy } from "../entities/Enemy";
 import { EnemyBullet } from "../entities/EnemyBullet";
 import { Mine } from "../entities/Mine";
-import { Player, PLAYER_EVENTS, type PlayerControls } from "../entities/Player";
+import { Player, PLAYER_EVENTS } from "../entities/Player";
 import { PlayerBullet } from "../entities/PlayerBullet";
 import { PowerUp } from "../entities/PowerUp";
 import { SupportDrone } from "../entities/SupportDrone";
+import { DesktopInputController } from "../input/DesktopInputController";
+import type { InputController } from "../input/InputController";
+import { MobileInputController } from "../input/MobileInputController";
+import type { InputMode } from "../input/inputTypes";
 import { AudioSystem } from "../systems/AudioSystem";
 import { BackgroundSystem, SPACE_BACKGROUND_PRESETS } from "../systems/BackgroundSystem";
 import { CollisionManager } from "../systems/CollisionManager";
@@ -18,10 +22,12 @@ import { RunEconomyTracker } from "../systems/RunEconomyTracker";
 import { TelegraphSystem } from "../systems/TelegraphSystem";
 import { UISystem } from "../systems/UISystem";
 import { WaveManager } from "../systems/WaveManager";
+import { WavePlanner } from "../systems/WavePlanner";
 import { RunAutosaveController } from "../services/RunAutosaveController";
+import { DEFAULT_COMBAT_TUNING, resolveCombatTuning } from "../config/mobile";
 import { DEFAULT_RUN_UPGRADE_EFFECTS } from "../config/upgrades";
 import type { EnemyType, GameStartPayload, SessionPresentation, WaveManagerCallbacks } from "../types/game";
-import type { PowerUpType, WavePlan } from "../types/combat";
+import type { CombatTuning, PowerUpType, WavePlan } from "../types/combat";
 import type { EconomyRunStartState, RunUpgradeEffects } from "../types/economy";
 import type {
   RunPhase,
@@ -50,6 +56,7 @@ import {
   TEXTURE_KEYS,
   UI_COLORS
 } from "../utils/constants";
+import { getDeviceProfile, shouldUseMobileInput, type DeviceProfile } from "../utils/device";
 import { chance, pickRandom, randomBetween } from "../utils/helpers";
 import { getViewportCenterX, getViewportHeight, getViewportWidth } from "../utils/viewport";
 
@@ -75,8 +82,10 @@ export class GameScene extends Phaser.Scene {
 
   private readonly trackedEnemies = new WeakSet<Enemy>();
   private readonly trackedBosses = new WeakSet<Boss>();
-  private controls?: PlayerControls;
-  private pauseKeys: Phaser.Input.Keyboard.Key[] = [];
+  private inputController?: InputController;
+  private inputMode: InputMode = "desktop";
+  private deviceProfile?: DeviceProfile;
+  private combatTuning: CombatTuning = DEFAULT_COMBAT_TUNING;
   private isPaused = false;
   private isTransitioning = true;
   private isFinishing = false;
@@ -112,6 +121,9 @@ export class GameScene extends Phaser.Scene {
     this.pendingSavedRun = data.savedRun;
     this.economyRun = data.savedRun?.run.economyRun ?? data.economyRun;
     this.runUpgradeEffects = this.economyRun?.effects ?? DEFAULT_RUN_UPGRADE_EFFECTS;
+    this.inputMode = "desktop";
+    this.deviceProfile = undefined;
+    this.combatTuning = DEFAULT_COMBAT_TUNING;
     this.isRestoringRun = false;
     this.rankedSubmissionAllowed = data.source !== "resume";
     this.completionSession = this.rankedSubmissionAllowed
@@ -128,6 +140,9 @@ export class GameScene extends Phaser.Scene {
     this.physics.world.resume();
     this.time.timeScale = 1;
     this.physics.world.setBounds(0, 0, viewportWidth, viewportHeight);
+    this.deviceProfile = getDeviceProfile(this);
+    this.inputMode = shouldUseMobileInput(this) ? "mobile" : "desktop";
+    this.combatTuning = resolveCombatTuning(this.inputMode === "mobile");
 
     this.audioSystem = AudioSystem.getInstance(this);
     this.audioSystem.playMusic(MUSIC_KEYS.GAMEPLAY);
@@ -146,10 +161,13 @@ export class GameScene extends Phaser.Scene {
       mines: this.mines,
       getPlayerSnapshot: () => this.player.getCombatSnapshot(),
       telegraphs: this.telegraphSystem,
+      tuning: this.combatTuning,
       onEnemySpawn: (enemy) => this.bindEnemyAudioEvents(enemy)
     });
 
     this.uiSystem = new UISystem(this, this.audioSystem, {
+      inputMode: this.inputMode,
+      deviceProfile: this.deviceProfile,
       onPauseResume: () => this.togglePause(),
       onPauseExitToMenu: () => this.exitToMainMenu()
     });
@@ -222,7 +240,7 @@ export class GameScene extends Phaser.Scene {
       isBossAlive: () => Boolean(this.activeBoss?.active)
     };
 
-    this.waveManager = new WaveManager(this, callbacks);
+    this.waveManager = new WaveManager(this, callbacks, new WavePlanner(this.combatTuning));
     this.autosaveController = new RunAutosaveController(
       getGameAppContext().runStateStore,
       () => this.captureRunState()
@@ -247,12 +265,13 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  public override update(time: number, _delta: number): void {
+  public override update(time: number, delta: number): void {
     this.background?.update(time);
+    const inputState = this.inputController?.update(time, delta);
 
     if (
       !this.isFinishing &&
-      this.pauseKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))
+      inputState?.pausePressed
     ) {
       this.togglePause();
     }
@@ -261,8 +280,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.controls) {
-      this.player.updateState(time, this.controls, this.playerBullets);
+    if (inputState) {
+      this.player.updateState(time, inputState, this.playerBullets);
     }
 
     const snapshot = this.player.getCombatSnapshot();
@@ -442,6 +461,7 @@ export class GameScene extends Phaser.Scene {
 
   private createPlayer(): void {
     this.player = new Player(this);
+    this.player.setCombatTuning(this.combatTuning);
     this.player.setUpgradeEffects(this.runUpgradeEffects);
     this.player.resetForRun(this.time.now);
     this.player.on(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
@@ -449,26 +469,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createInput(): void {
-    const keyboard = this.input.keyboard;
-    if (!keyboard) {
-      throw new Error("Keyboard input is unavailable for GameScene.");
-    }
-
-    this.controls = {
-      left: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
-      right: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
-      up: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
-      down: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
-      leftAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-      rightAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-      upAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-      downAlt: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-      fire: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
-    };
-    this.pauseKeys = [
-      keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
-      keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P)
-    ];
+    this.inputController = this.inputMode === "mobile"
+      ? new MobileInputController(this, this.audioSystem)
+      : new DesktopInputController(this);
   }
 
   private captureWaveProgress(checkpointWave: number): SavedWaveProgressState | null {
@@ -552,7 +555,8 @@ export class GameScene extends Phaser.Scene {
         stage: plan.stage,
         time: this.time.now,
         director: this.combatDirector,
-        telegraphs: this.telegraphSystem
+        telegraphs: this.telegraphSystem,
+        tuning: this.combatTuning
       });
       this.bindEnemyAudioEvents(enemy);
     });
@@ -590,7 +594,8 @@ export class GameScene extends Phaser.Scene {
     boss.spawn({
       plan,
       director: this.combatDirector,
-      telegraphs: this.telegraphSystem
+      telegraphs: this.telegraphSystem,
+      tuning: this.combatTuning
     });
     boss.restorePersistentState(bossState, this.time.now);
     this.activeBoss = boss;
@@ -634,7 +639,8 @@ export class GameScene extends Phaser.Scene {
     boss.spawn({
       plan,
       director: this.combatDirector,
-      telegraphs: this.telegraphSystem
+      telegraphs: this.telegraphSystem,
+      tuning: this.combatTuning
     });
     this.activeBoss = boss;
     this.uiSystem.setBossHealth(boss.health, boss.maxHealth);
@@ -1081,6 +1087,8 @@ export class GameScene extends Phaser.Scene {
 
     this.uiSystem.destroy();
     this.uiSystem = new UISystem(this, this.audioSystem, {
+      inputMode: this.inputMode,
+      deviceProfile: this.deviceProfile,
       onPauseResume: () => this.togglePause(),
       onPauseExitToMenu: () => this.exitToMainMenu()
     });
@@ -1098,9 +1106,11 @@ export class GameScene extends Phaser.Scene {
     const viewportWidth = getViewportWidth(this);
     const viewportHeight = getViewportHeight(this);
 
+    this.deviceProfile = getDeviceProfile(this);
     this.physics.world.setBounds(0, 0, viewportWidth, viewportHeight);
     this.layoutBackground();
     this.refreshUiLayout();
+    this.inputController?.resize();
 
     if (this.player?.active) {
       this.player.setPosition(
@@ -1200,31 +1210,8 @@ export class GameScene extends Phaser.Scene {
     this.destroyGroupMembers(this.playerBullets);
     this.destroyGroupMembers(this.enemyBullets);
 
-    if (this.controls) {
-      this.input.keyboard?.removeKey(this.controls.left);
-      this.input.keyboard?.removeKey(this.controls.right);
-      this.input.keyboard?.removeKey(this.controls.up);
-      this.input.keyboard?.removeKey(this.controls.down);
-      if (this.controls.leftAlt) {
-        this.input.keyboard?.removeKey(this.controls.leftAlt);
-      }
-      if (this.controls.rightAlt) {
-        this.input.keyboard?.removeKey(this.controls.rightAlt);
-      }
-      if (this.controls.upAlt) {
-        this.input.keyboard?.removeKey(this.controls.upAlt);
-      }
-      if (this.controls.downAlt) {
-        this.input.keyboard?.removeKey(this.controls.downAlt);
-      }
-      this.input.keyboard?.removeKey(this.controls.fire);
-      this.controls = undefined;
-    }
-
-    this.pauseKeys.forEach((key) => {
-      this.input.keyboard?.removeKey(key);
-    });
-    this.pauseKeys = [];
+    this.inputController?.destroy();
+    this.inputController = undefined;
 
     this.player?.off(PLAYER_EVENTS.FIRED, this.handlePlayerFired, this);
     this.player?.destroy();
@@ -1237,7 +1224,9 @@ export class GameScene extends Phaser.Scene {
     this.time.timeScale = 1;
     this.tweens?.killAll();
 
-    this.controls = undefined;
+    this.inputMode = "desktop";
+    this.deviceProfile = undefined;
+    this.combatTuning = DEFAULT_COMBAT_TUNING;
     this.playerBullets = undefined as unknown as Phaser.Physics.Arcade.Group;
     this.enemyBullets = undefined as unknown as Phaser.Physics.Arcade.Group;
     this.enemies = undefined as unknown as Phaser.Physics.Arcade.Group;
