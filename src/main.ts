@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 
+import "./pwa";
 import { LazyFirebaseAuthService } from "./auth/LazyFirebaseAuthService";
 import { AuthState } from "./auth/authState";
 import { setGameAppContext } from "./game/appContext";
