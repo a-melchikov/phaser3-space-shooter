@@ -114,6 +114,7 @@ export class FirebaseAuthService implements AuthService {
       return {
         ok: false,
         session,
+        errorCode: "auth/sign-out-before-guest-failed",
         errorMessage: "Не удалось выйти из профиля Google перед переходом в гостевой режим."
       };
     }
@@ -135,6 +136,7 @@ export class FirebaseAuthService implements AuthService {
       return {
         ok: false,
         session,
+        errorCode: "auth/google-unavailable",
         errorMessage: "Вход через Google недоступен в этой сборке."
       };
     }
@@ -155,6 +157,7 @@ export class FirebaseAuthService implements AuthService {
       return {
         ok: false,
         session: this.getSession(),
+        errorCode: this.getSafeErrorCode(error),
         errorMessage: this.getReadableErrorMessage(error)
       };
     }
@@ -172,6 +175,7 @@ export class FirebaseAuthService implements AuthService {
       return {
         ok: false,
         session,
+        errorCode: "auth/sign-out-failed",
         errorMessage: "Не удалось завершить сеанс Google."
       };
     }
@@ -228,5 +232,19 @@ export class FirebaseAuthService implements AuthService {
     }
 
     return "Не удалось войти через Google.";
+  }
+
+  private getSafeErrorCode(error: unknown): string {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      error.code.startsWith("auth/")
+    ) {
+      return error.code;
+    }
+
+    return "auth/unknown";
   }
 }

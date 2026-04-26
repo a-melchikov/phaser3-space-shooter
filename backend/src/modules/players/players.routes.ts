@@ -16,7 +16,7 @@ export async function playersRoutes(
 ): Promise<void> {
   const playersService = new PlayersService(fastify.prisma);
   const controller = new PlayersController(playersService);
-  const authenticate = authenticateRequest(options.authService);
+  const authenticate = authenticateRequest(options.authService, fastify.audit);
 
   fastify.get("/api/players/me", { preHandler: authenticate }, controller.getCurrentPlayer);
 }

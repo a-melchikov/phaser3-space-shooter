@@ -26,6 +26,7 @@ export interface AuthActionResult {
   ok: boolean;
   session: UserSession;
   errorMessage?: string;
+  errorCode?: string;
 }
 
 export type AuthStateListener = (session: UserSession) => void;

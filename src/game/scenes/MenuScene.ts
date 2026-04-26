@@ -1135,6 +1135,7 @@ export class MenuScene extends Phaser.Scene {
     this.isAuthBusy = false;
 
     if (!result.ok) {
+      getGameAppContext().auditService.recordAuthLoginFailure(result.errorCode);
       this.authMessage = result.errorMessage || "Не удалось выполнить вход через Google.";
       this.authMessageColor = colorToHex(UI_THEME.colors.danger);
       this.renderContent();
@@ -1142,6 +1143,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.session = result.session;
+    getGameAppContext().auditService.recordAuthLoginSuccess(result.session);
     this.authMessage = "Профиль Google подключён.";
     this.authMessageColor = colorToHex(UI_THEME.colors.success);
     this.renderContent();
@@ -1156,6 +1158,10 @@ export class MenuScene extends Phaser.Scene {
     this.authMessage = "";
     this.renderContent();
 
+    const previousSession = this.session;
+    const logoutAuditToken = previousSession.isAuthenticated
+      ? await getGameAppContext().authService.getIdToken().catch(() => null)
+      : null;
     const result = await getGameAppContext().authService.signOut();
     this.isAuthBusy = false;
 
@@ -1167,6 +1173,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.session = result.session;
+    getGameAppContext().auditService.recordAuthLogout(previousSession, logoutAuditToken);
     this.authMessage = "";
     this.renderContent();
   }

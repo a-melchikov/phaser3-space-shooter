@@ -60,6 +60,7 @@ export class LazyFirebaseAuthService implements AuthService {
       return {
         ok: false,
         session,
+        errorCode: "auth/google-unavailable",
         errorMessage: "Вход через Google недоступен в этой сборке."
       };
     }
