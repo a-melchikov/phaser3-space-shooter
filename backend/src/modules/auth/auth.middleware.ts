@@ -40,10 +40,11 @@ async function auditAuthFailure(
   reason: string
 ): Promise<void> {
   const isRankedSubmission = request.method === "POST" && request.url.startsWith("/api/leaderboard/submit");
+  const isEconomyRoute = request.url.startsWith("/api/economy/");
 
   await auditService?.tryRecordFromRequest(request, {
-    eventType: isRankedSubmission ? "ranked_submit_rejected" : "auth_token_invalid",
-    category: "security",
+    eventType: isEconomyRoute ? "guest_economy_attempt" : isRankedSubmission ? "ranked_submit_rejected" : "auth_token_invalid",
+    category: isEconomyRoute ? "economy" : "security",
     actorType: "unknown",
     source: "backend",
     status: "rejected",

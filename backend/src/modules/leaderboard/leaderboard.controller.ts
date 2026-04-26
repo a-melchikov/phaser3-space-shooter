@@ -39,6 +39,7 @@ export class LeaderboardController {
       metadata: {
         score: payload.score,
         wave: payload.wave,
+        economyRunId: payload.economyRunId,
         improvedBest: result.improvedBest,
         rank: result.rank
       }

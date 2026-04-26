@@ -2,7 +2,8 @@ import { z } from "zod";
 
 export const submitScoreSchema = z.object({
   score: z.number().int().positive(),
-  wave: z.number().int().min(1)
+  wave: z.number().int().min(1),
+  economyRunId: z.string().uuid().optional()
 });
 
 export const leaderboardQuerySchema = z.object({

@@ -8,6 +8,7 @@ import { auditPlugin } from "./modules/audit/audit.plugin.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import type { AuditActorType } from "./modules/audit/audit.types.js";
 import { FirebaseAuthService } from "./modules/auth/auth.service.js";
+import { economyRoutes } from "./modules/economy/economy.routes.js";
 import { leaderboardRoutes } from "./modules/leaderboard/leaderboard.routes.js";
 import { playersRoutes } from "./modules/players/players.routes.js";
 import { prismaPlugin } from "./plugins/prisma.js";
@@ -78,6 +79,10 @@ export function buildApp(env: AppEnv = loadEnv()): FastifyInstance {
 
   void app.register(async (instance) => {
     await auditRoutes(instance, {
+      authService,
+      env
+    });
+    await economyRoutes(instance, {
       authService,
       env
     });

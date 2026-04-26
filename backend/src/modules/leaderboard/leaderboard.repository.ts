@@ -27,13 +27,32 @@ export class LeaderboardRepository {
     executor: PrismaExecutor,
     playerId: string,
     score: number,
-    wave: number
+    wave: number,
+    economyRunId?: string
   ): Promise<ScoreEntry> {
     return executor.scoreEntry.create({
       data: {
         playerId,
         score,
-        wave
+        wave,
+        economyRunId
+      }
+    });
+  }
+
+  public getPlayerEconomyRun(
+    executor: PrismaExecutor,
+    playerId: string,
+    economyRunId: string
+  ) {
+    return executor.economyRunSession.findFirst({
+      where: {
+        playerId,
+        runId: economyRunId,
+        status: "finished"
+      },
+      select: {
+        runId: true
       }
     });
   }

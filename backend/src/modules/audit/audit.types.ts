@@ -15,6 +15,13 @@ export const auditEventTypes = [
   "boss_wave_started",
   "ranked_submit_accepted",
   "ranked_submit_rejected",
+  "economy_run_started",
+  "economy_run_finished",
+  "shards_awarded",
+  "upgrade_purchased",
+  "economy_submission_rejected",
+  "suspicious_economy_submission",
+  "guest_economy_attempt",
   "invalid_payload",
   "auth_token_invalid",
   "suspicious_request",
@@ -40,7 +47,7 @@ export const clientAuditEventTypes = [
 
 export type ClientAuditEventType = (typeof clientAuditEventTypes)[number];
 
-export type AuditCategory = "visit" | "auth" | "gameplay" | "leaderboard" | "security" | "api";
+export type AuditCategory = "visit" | "auth" | "gameplay" | "leaderboard" | "economy" | "security" | "api";
 export type AuditActorType = "guest" | "authenticated" | "system" | "unknown";
 export type AuditEventStatus = "info" | "success" | "failure" | "rejected" | "error";
 export type AuditSource = "frontend" | "backend" | "system";

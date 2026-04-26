@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { AppError } from "../../utils/errors.js";
 import type { AuthenticatedPlayer } from "../auth/auth.types.js";
 
 import type {
@@ -54,7 +55,21 @@ export class LeaderboardService {
     input: SubmitScoreInput
   ): Promise<SubmitScoreResult> {
     const submissionResult = await this.repository.executeTransaction(async (tx) => {
-      const scoreEntry = await this.repository.createScoreEntry(tx, player.playerId, input.score, input.wave);
+      if (input.economyRunId) {
+        const economyRun = await this.repository.getPlayerEconomyRun(tx, player.playerId, input.economyRunId);
+
+        if (!economyRun) {
+          throw new AppError(400, "invalid_economy_run", "Economy run is not finished or does not belong to this player.");
+        }
+      }
+
+      const scoreEntry = await this.repository.createScoreEntry(
+        tx,
+        player.playerId,
+        input.score,
+        input.wave,
+        input.economyRunId
+      );
       const updateResult = await this.repository.tryUpdatePlayerBest(
         tx,
         player.playerId,
