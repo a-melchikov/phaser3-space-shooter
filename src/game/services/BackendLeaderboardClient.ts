@@ -43,6 +43,7 @@ export class BackendLeaderboardClient {
     result: {
       score: number;
       wave: number;
+      economyRunId?: string;
     },
     token: string
   ): Promise<RankedSubmitResponse> {

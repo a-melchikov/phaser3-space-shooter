@@ -65,7 +65,8 @@ export class ResultsService {
       wave: result.wave,
       completedAt: result.completedAt,
       rankedSubmissionAllowed: result.rankedSubmissionAllowed,
-      playerLabel: session.displayName
+      playerLabel: session.displayName,
+      economyRunId: result.economyRunId
     };
 
     return this.rankedScoreSubmissionService.submitScore(payload, session);

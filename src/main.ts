@@ -5,8 +5,10 @@ import { AuthState } from "./auth/authState";
 import { setGameAppContext } from "./game/appContext";
 import { createGameConfig } from "./game/config";
 import { BackendAuditClient } from "./game/services/BackendAuditClient";
+import { BackendEconomyClient } from "./game/services/BackendEconomyClient";
 import { BackendLeaderboardClient } from "./game/services/BackendLeaderboardClient";
 import { AuditService } from "./game/services/AuditService";
+import { EconomyService } from "./game/services/EconomyService";
 import { HttpRankedScoreSubmissionService } from "./game/services/HttpRankedScoreSubmissionService";
 import { OnlineLeaderboardService } from "./game/services/OnlineLeaderboardService";
 import { PracticeScoreStore } from "./game/services/PracticeScoreStore";
@@ -25,6 +27,8 @@ const authService = new LazyFirebaseAuthService(authState);
 const auditClient = new BackendAuditClient();
 const auditService = new AuditService(authService, auditClient);
 const leaderboardClient = new BackendLeaderboardClient();
+const economyClient = new BackendEconomyClient();
+const economyService = new EconomyService(authService, economyClient);
 const practiceScoreStore = new PracticeScoreStore();
 const resultsService = new ResultsService(
   practiceScoreStore,
@@ -37,6 +41,7 @@ const runStateStore = new RunStateStore();
 setGameAppContext({
   authService,
   auditService,
+  economyService,
   onlineLeaderboardService,
   resultsService,
   runStateStore

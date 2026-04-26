@@ -42,7 +42,8 @@ export class HttpRankedScoreSubmissionService implements RankedScoreSubmissionSe
       const response = await this.backendLeaderboardClient.submitRankedScore(
         {
           score: result.score,
-          wave: result.wave
+          wave: result.wave,
+          economyRunId: result.economyRunId
         },
         idToken
       );
